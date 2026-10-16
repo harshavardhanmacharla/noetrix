@@ -1,0 +1,224 @@
+"""
+Test cases router with authentication and tenant isolation.
+"""
+import io
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.database import get_db
+from app.dependencies import (
+    get_current_user,
+    get_user_org_ids,
+    verify_project_access,
+    verify_test_case_access,
+)
+from app.models.project import Project
+from app.models.test_case import TestCase, TestStep
+from app.models.user import User
+from app.schemas.test_case import TestCaseResponse
+from app.services.csv_validator import (
+    REQUIRED_COLUMNS,
+    SUPPORTED_ACTIONS,
+    ValidationResult,
+    validate_csv,
+)
+
+router = APIRouter(tags=["Test Cases"])
+settings = get_settings()
+
+CSV_TEMPLATE_ROWS = [
+    "TC001,Login Test,1,navigate,,https://example.com,",
+    "TC001,Login Test,2,fill,#username,admin@example.com,",
+    "TC001,Login Test,3,fill,#password,secret123,",
+    "TC001,Login Test,4,click,button[type=submit],,",
+    "TC001,Login Test,5,verify_url,,,https://example.com/dashboard",
+    "TC002,Search Test,1,navigate,,https://example.com,",
+    "TC002,Search Test,2,fill,input[name=search],test query,",
+    "TC002,Search Test,3,click,.search-btn,,",
+    "TC002,Search Test,4,verify_text,.search-results,,Results found",
+]
+
+
+@router.get("/api/test-cases", response_model=List[TestCaseResponse])
+async def list_all_test_cases(
+    project_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[TestCase]:
+    """List test cases accessible by current user, optionally filtered by project_id."""
+    if project_id:
+        verify_project_access(project_id, current_user, db)
+        return (
+            db.query(TestCase)
+            .filter(TestCase.project_id == project_id, TestCase.is_active.is_(True))
+            .order_by(TestCase.created_at.desc())
+            .all()
+        )
+
+    user_org_ids = get_user_org_ids(current_user, db)
+    if not user_org_ids and not current_user.is_superuser:
+        return []
+
+    query = (
+        db.query(TestCase)
+        .join(Project, Project.id == TestCase.project_id)
+        .filter(TestCase.is_active.is_(True))
+    )
+    if not current_user.is_superuser:
+        query = query.filter(Project.org_id.in_(user_org_ids))
+
+    return query.order_by(TestCase.created_at.desc()).all()
+
+
+@router.get("/api/projects/{project_id}/test-cases", response_model=List[TestCaseResponse])
+async def list_test_cases(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[TestCase]:
+    """List all test cases for a project if user has organization access."""
+    verify_project_access(project_id, current_user, db)
+    return (
+        db.query(TestCase)
+        .filter(TestCase.project_id == project_id, TestCase.is_active.is_(True))
+        .order_by(TestCase.created_at.desc())
+        .all()
+    )
+
+
+@router.post(
+    "/api/projects/{project_id}/test-cases/upload",
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_test_cases_csv(
+    project_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Upload a CSV file, validate it, and persist test cases + steps to DB.
+    Verifies organization authorization before saving.
+    """
+    verify_project_access(project_id, current_user, db)
+
+    content = await file.read()
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds max upload size of {settings.MAX_UPLOAD_SIZE_MB} MB.",
+        )
+
+    result = validate_csv(content, filename=file.filename or "upload.csv")
+
+    val_dump = result.model_dump()
+    if not result.is_valid:
+        return {
+            **val_dump,
+            "validation": val_dump,
+            "saved": False,
+            "created_test_cases": [],
+        }
+
+    created_ids = []
+    for parsed_case in result.parsed_cases:
+        tc = TestCase(
+            project_id=project_id,
+            name=parsed_case["test_name"],
+            created_by=current_user.email,
+            csv_filename=file.filename,
+            is_active=True,
+        )
+        db.add(tc)
+        db.flush()
+
+        for step_data in parsed_case["steps"]:
+            step = TestStep(
+                test_case_id=tc.id,
+                step_number=step_data["step_number"],
+                action=step_data["action"],
+                target=step_data.get("target"),
+                value=step_data.get("value"),
+                expected_result=step_data.get("expected_result"),
+            )
+            db.add(step)
+
+        created_ids.append({"id": tc.id, "name": tc.name})
+
+    db.commit()
+
+    return {
+        **val_dump,
+        "validation": val_dump,
+        "saved": True,
+        "created_test_cases": created_ids,
+    }
+
+
+@router.post("/api/test-cases/upload-csv", status_code=status.HTTP_201_CREATED)
+async def upload_csv_form(
+    project_id: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Form upload endpoint for test cases CSV."""
+    return await upload_test_cases_csv(
+        project_id=project_id,
+        file=file,
+        current_user=current_user,
+        db=db,
+    )
+
+
+@router.post("/api/test-cases/validate-csv")
+async def validate_csv_endpoint(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Validate uploaded CSV without saving to database."""
+    content = await file.read()
+    result = validate_csv(content, filename=file.filename or "upload.csv")
+    return result.model_dump()
+
+
+@router.get("/api/test-cases/{test_case_id}", response_model=TestCaseResponse)
+async def get_test_case(
+    test_case_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TestCase:
+    """Get a single test case with its steps if user has access."""
+    return verify_test_case_access(test_case_id, current_user, db)
+
+
+@router.delete("/api/test-cases/{test_case_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_test_case(
+    test_case_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Soft-delete a test case by setting is_active=False if user has access."""
+    tc = verify_test_case_access(test_case_id, current_user, db)
+    tc.is_active = False
+    db.commit()
+
+
+@router.get("/api/csv-template")
+async def download_csv_template(
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Return a downloadable CSV template file with example data."""
+    header = ",".join(REQUIRED_COLUMNS)
+    body = "\n".join(CSV_TEMPLATE_ROWS)
+    content = f"{header}\n{body}\n"
+
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="testpilot_template.csv"'},
+    )

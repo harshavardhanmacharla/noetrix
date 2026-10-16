@@ -1,0 +1,16 @@
+test_case_id,test_name,step_number,action,target,value,expected_result
+TC001,Load Home Page,1,navigate,/,,
+TC001,Load Home Page,2,verify_url,/,,http://localhost
+TC002,Login with Valid Credentials,1,navigate,/login,,
+TC002,Login with Valid Credentials,2,fill,#username,admin@example.com,
+TC002,Login with Valid Credentials,3,fill,#password,password123,
+TC002,Login with Valid Credentials,4,click,button[type='submit'],,
+TC002,Login with Valid Credentials,5,verify_url,/dashboard,,http://localhost/dashboard
+TC003,Submit Time Entry,1,navigate,/timesheet,,
+TC003,Submit Time Entry,2,fill,#hours,8,
+TC003,Submit Time Entry,3,fill,#description,Development work,
+TC003,Submit Time Entry,4,click,#submit-entry,,
+TC003,Submit Time Entry,5,verify_text,body,,Time entry saved successfully
+TC004,Verify Navigation Links,1,navigate,/,,
+TC004,Verify Navigation Links,2,click,a[href='/reports'],,
+TC004,Verify Navigation Links,3,verify_url,/reports,,http://localhost/reports

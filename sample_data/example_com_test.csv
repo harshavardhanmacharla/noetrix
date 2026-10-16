@@ -1,0 +1,3 @@
+test_case_id,test_name,step_number,action,target,value,expected_result
+TC_EX01,Example Domain Verification,1,navigate,,https://example.com,
+TC_EX01,Example Domain Verification,2,verify_url,,,https://example.com
