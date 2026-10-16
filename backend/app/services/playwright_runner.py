@@ -203,6 +203,7 @@ async def _execute_playwright(
             "[REDACTED]",
             msg,
         )
+
         timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
         log_lines.append(f"[{timestamp}] {msg}")
 
