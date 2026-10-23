@@ -44,6 +44,33 @@ export interface TestCase {
   created_at: string;
 }
 
+export interface StepDetail {
+  step_number: number;
+  action: string;
+  target?: string | null;
+  value?: string | null;
+  expected_result?: string | null;
+  original_instruction?: string | null;
+  status: 'passed' | 'failed' | 'skipped' | 'running';
+  duration_ms?: number | null;
+  category?: string | null;
+  failure_reason?: string | null;
+  verification_result?: {
+    type?: string;
+    expected?: string;
+    actual?: string;
+    matched?: boolean;
+    preview?: string;
+  } | null;
+}
+
+export interface StepSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+}
+
 export interface TestRun {
   id: string;
   project_id: string;
@@ -53,6 +80,10 @@ export interface TestRun {
   total_tests: number;
   passed_tests: number;
   failed_tests: number;
+  total_steps?: number;
+  passed_steps?: number;
+  failed_steps?: number;
+  skipped_steps?: number;
   error_message?: string;
   video_path?: string;
   created_at: string;
@@ -68,6 +99,8 @@ export interface TestResult {
   error_message?: string;
   screenshot_path?: string;
   log_output?: string;
+  steps?: StepDetail[];
+  step_summary?: StepSummary;
   test_case?: TestCase;
 }
 

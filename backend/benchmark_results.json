@@ -1,0 +1,852 @@
+{
+  "timestamp": "2026-10-19T06:37:57Z",
+  "parser_metrics": {
+    "accuracy": "72/72",
+    "accuracy_pct": 100.0,
+    "ambiguity_accuracy": "5/5",
+    "ambiguity_accuracy_pct": 100.0,
+    "duration_ms": 6.66,
+    "mean_case_ms": 0.09
+  },
+  "browser_metrics": {
+    "task_success_rate": "6/6",
+    "task_success_rate_pct": 100.0,
+    "false_positive_pass_rate": "0/5",
+    "false_positive_pass_rate_pct": 0.0,
+    "conformance_rate": "11/11",
+    "conformance_pct": 100.0,
+    "duration_ms": 61904.33,
+    "mean_scenario_ms": 5627.67
+  },
+  "repeatability_metrics": {
+    "repetitions": 3,
+    "scenarios_tested": 5,
+    "flaky_scenarios": 0,
+    "flakiness_rate_pct": 0.0,
+    "details": [
+      {
+        "scenario_id": "E2E-01",
+        "rounds": 3,
+        "outcomes": [
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "is_flaky": false
+      },
+      {
+        "scenario_id": "E2E-02",
+        "rounds": 3,
+        "outcomes": [
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "is_flaky": false
+      },
+      {
+        "scenario_id": "E2E-03",
+        "rounds": 3,
+        "outcomes": [
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "is_flaky": false
+      },
+      {
+        "scenario_id": "E2E-04",
+        "rounds": 3,
+        "outcomes": [
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "is_flaky": false
+      },
+      {
+        "scenario_id": "E2E-05",
+        "rounds": 3,
+        "outcomes": [
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "is_flaky": false
+      }
+    ]
+  },
+  "parser_details": [
+    {
+      "id": "PAR-NAV-01",
+      "input": "open https://example.com",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 1.26,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-02",
+      "input": "visit 'https://example.com/login'",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-03",
+      "input": "go to https://example.com",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-04",
+      "input": "navigate to https://noetrix.internal",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-05",
+      "input": "browse to https://example.com/search?q=test&lang=en#results",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-06",
+      "input": "launch http://localhost:8080/dashboard",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-07",
+      "input": "access /settings",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-NAV-08",
+      "input": "browse 'https://subdomain.example.org:8443/app?session=123'",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-01",
+      "input": "type \"admin\" into \"#username\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 3.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-02",
+      "input": "enter \"${secret:APEX_PASSWORD}\" into \"#password\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-03",
+      "input": "input \"search query\" into \"#search-box\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-04",
+      "input": "fill \"#username\" with \"admin\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-05",
+      "input": "populate \"#email\" with \"alice@example.com\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-06",
+      "input": "populate the \"Notes\" field with \"Urgent review\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.34,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-07",
+      "input": "set \"#username\" to \"admin\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-08",
+      "input": "put \"secret123\" into \"#token\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-09",
+      "input": "insert \"hello world\" into \"#editor\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-FILL-10",
+      "input": "set the option \"Language\" to \"English\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-01",
+      "input": "click \"#submit-btn\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.75,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-02",
+      "input": "click button[type=\"submit\"]",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-03",
+      "input": "click the \"Sign In\" button",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-04",
+      "input": "click on \"#submit\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-05",
+      "input": "tap \"#menu-icon\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-06",
+      "input": "press the \"Save\" button",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-07",
+      "input": "submit \"#login-form\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-08",
+      "input": "select the \"Save Changes\" button",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-09",
+      "input": "select option \"Express Shipping\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-10",
+      "input": "hit the \"Submit\" button",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-11",
+      "input": "choose \"Premium Plan\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-12",
+      "input": "press on \"#confirm\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-13",
+      "input": "click the tab \"Security\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-CLICK-14",
+      "input": "click the menuitem \"Log Out\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-01",
+      "input": "verify that text \"Welcome back\" is visible",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-02",
+      "input": "check that text \"Success\" is visible",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-03",
+      "input": "assert that \"Dashboard\" is visible",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-04",
+      "input": "ensure that text \"Welcome\" is visible in \"#header\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-05",
+      "input": "confirm that \"Status: OK\" is shown in \"#status-card\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-06",
+      "input": "check that page displays \"Willkommen, Jürgen!\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-07",
+      "input": "verify that page contains \"注文が完了しました\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.03,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERTEXT-08",
+      "input": "verify that the page contains \"Don't lose your API key!\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERURL-01",
+      "input": "verify url \"https://example.com/dashboard\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERURL-02",
+      "input": "verify that the url contains \"/dashboard\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERURL-03",
+      "input": "check current url is \"https://example.com\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERURL-04",
+      "input": "ensure that the url contains \"/search?q=test&lang=en#results\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-VERURL-05",
+      "input": "confirm that the current url is \"https://example.com:8443/home\"",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-DISC-01",
+      "input": "discover page",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-DISC-02",
+      "input": "scan page",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-DISC-03",
+      "input": "analyze page",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-DISC-04",
+      "input": "catalog page",
+      "expected_valid": true,
+      "actual_valid": true,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-01",
+      "input": "open",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-02",
+      "input": "browse to",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.0,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-03",
+      "input": "type into \"#username\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-04",
+      "input": "type \"admin\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-05",
+      "input": "fill \"#username\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-06",
+      "input": "populate \"#email\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-07",
+      "input": "set \"#username\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-08",
+      "input": "put \"data\"",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-09",
+      "input": "click",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-10",
+      "input": "select",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-11",
+      "input": "hit",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-12",
+      "input": "verify text",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-ERR-13",
+      "input": "ensure url",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-AMB-01",
+      "input": "click submit and enter password",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.0,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-AMB-02",
+      "input": "open https://example.com and verify text 'Dashboard'",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-AMB-03",
+      "input": "select option and type admin",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.0,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-AMB-04",
+      "input": "populate name with Alice and then hit submit",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-AMB-05",
+      "input": "set #user to test and ensure that text 'Success' is visible",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.0,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-UNSUPP-01",
+      "input": "scroll down to the footer",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-UNSUPP-02",
+      "input": "hover over the navigation menu",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-UNSUPP-03",
+      "input": "drag the file to the dropzone",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.02,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-UNSUPP-04",
+      "input": "refresh the browser window",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    },
+    {
+      "id": "PAR-UNSUPP-05",
+      "input": "drink a cup of hot coffee",
+      "expected_valid": false,
+      "actual_valid": false,
+      "match": true,
+      "duration_ms": 0.01,
+      "failure_reason": null
+    }
+  ],
+  "browser_details": [
+    {
+      "id": "E2E-01",
+      "name": "Delayed Element Appearance (setTimeout)",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1566.28,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-02",
+      "name": "Modal Opening & Visibility Transition",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1310.17,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-03",
+      "name": "Input-Dependent Enabled Button",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1164.21,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-04",
+      "name": "SPA Route Transitions via history.pushState",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1227.58,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-05",
+      "name": "DOM Element Replacement (Component Re-mount)",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1143.35,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-06",
+      "name": "Mixed CSV Pipeline Ingestion & Real Execution",
+      "expected_status": "passed",
+      "actual_status": "passed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1273.21,
+      "error_message": null,
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-07",
+      "name": "Secret Reference Ingestion with Failure Redaction",
+      "expected_status": "failed",
+      "actual_status": "failed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 6021.17,
+      "error_message": "Step 3 (click) failed: Could not find any clickable element matching 'GhostButtonForFailure'. Searched button roles, link roles, accessible labels, and visible text.",
+      "screenshot_captured": false
+    },
+    {
+      "id": "E2E-08",
+      "name": "Permanently Missing Element Clean Timeout",
+      "expected_status": "failed",
+      "actual_status": "failed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 6672.36,
+      "error_message": "Step 2 (click) failed: Could not find any clickable element matching 'MissingButton999XYZ'. Searched button roles, link roles, accessible labels, and visible text.",
+      "screenshot_captured": true
+    },
+    {
+      "id": "E2E-09",
+      "name": "Duplicate Visible Elements Ambiguity Detection",
+      "expected_status": "failed",
+      "actual_status": "failed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 1189.73,
+      "error_message": "Step 2 (click) failed: Ambiguous target 'Remove Target' for action 'click': matches 2 visible elements using button role (exact). Please specify a unique element label, text, or selector.",
+      "screenshot_captured": true
+    },
+    {
+      "id": "E2E-10",
+      "name": "Assertion Failure After Click (False-Positive Guard)",
+      "expected_status": "failed",
+      "actual_status": "failed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 33807.38,
+      "error_message": "Step 3 (verify_text) failed: Text 'UnmatchedAssertionString' was not found as visible text on the page. Visible page text begins: 'Noetrix Benchmark Environment Trigger Delayed Item Open Config Dialog Apply Configuration Account Username Commit Account Analytics Default Portal View Begin Upgrade Remove Target Remove Target'",
+      "screenshot_captured": true
+    },
+    {
+      "id": "E2E-11",
+      "name": "URL Verification Assertion Failure",
+      "expected_status": "failed",
+      "actual_status": "failed",
+      "match": true,
+      "is_false_positive": false,
+      "duration_ms": 6528.89,
+      "error_message": "Step 2 (verify_url) failed: URL verification failed: expected '/wrong-expected-path' in current URL 'http://127.0.0.1:49963/benchmark.html'",
+      "screenshot_captured": true
+    }
+  ]
+}

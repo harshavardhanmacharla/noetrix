@@ -31,6 +31,10 @@ class TestRunResponse(BaseModel):
     total_tests: int
     passed_tests: int
     failed_tests: int
+    total_steps: Optional[int] = None
+    passed_steps: Optional[int] = None
+    failed_steps: Optional[int] = None
+    skipped_steps: Optional[int] = None
     error_message: Optional[str] = None
     video_path: Optional[str] = None
     created_at: datetime
@@ -51,6 +55,31 @@ class ArtifactResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StepDetailResponse(BaseModel):
+    step_number: int
+    action: str
+    target: Optional[str] = None
+    value: Optional[str] = None
+    expected_result: Optional[str] = None
+    original_instruction: Optional[str] = None
+    status: str = "skipped"  # passed, failed, skipped, running
+    duration_ms: Optional[float] = None
+    category: Optional[str] = None
+    failure_reason: Optional[str] = None
+    verification_result: Optional[dict] = None
+
+    model_config = {"from_attributes": True}
+
+
+class StepSummaryResponse(BaseModel):
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+
+    model_config = {"from_attributes": True}
+
+
 class TestResultResponse(BaseModel):
     id: str
     run_id: str
@@ -61,6 +90,8 @@ class TestResultResponse(BaseModel):
     error_message: Optional[str] = None
     screenshot_path: Optional[str] = None
     log_output: Optional[str] = None
+    steps: List[StepDetailResponse] = []
+    step_summary: Optional[StepSummaryResponse] = None
     artifacts: List[ArtifactResponse] = []
 
     model_config = {"from_attributes": True}

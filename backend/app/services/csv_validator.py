@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from pydantic import BaseModel
 
+from app.services.instruction_parser import parse_step_data
+
 REQUIRED_COLUMNS = [
     "test_case_id",
     "test_name",
@@ -207,15 +209,17 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
     # --- Row-level validation ---
     # Track step numbers per test_case_id for sequential check
     step_tracker: Dict[str, List[int]] = {}
+    normalized_steps_by_idx: Dict[int, Dict[str, Any]] = {}
 
     for idx, row in df.iterrows():
         row_num = int(idx) + 2  # 1-indexed + header row
 
         test_case_id = str(row.get("test_case_id", "")).strip()
-        action = str(row.get("action", "")).strip().lower()
-        target = str(row.get("target", "")).strip()
-        value = str(row.get("value", "")).strip()
-        expected_result = str(row.get("expected_result", "")).strip()
+        raw_action = str(row.get("action", "")).strip()
+        action_lower = raw_action.lower()
+        target = _clean_val(row.get("target"))
+        value = _clean_val(row.get("value"))
+        expected_result = _clean_val(row.get("expected_result"))
         step_number_raw = str(row.get("step_number", "")).strip()
 
         # Treat pandas NaN as empty string
@@ -238,39 +242,103 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
             )
             step_number = None
 
-        # Validate action
-        if action not in SUPPORTED_ACTIONS:
-            errors.append(
-                ValidationError(
-                    row=row_num,
-                    column="action",
-                    message=f"Unsupported action '{action}'. Supported: {SUPPORTED_ACTIONS}.",
-                )
-            )
-
-        # Validate target not empty for actions that need it
-        if action in ACTIONS_REQUIRING_TARGET and target in ("", "nan"):
-            errors.append(
-                ValidationError(
-                    row=row_num,
-                    column="target",
-                    message=f"Action '{action}' requires a non-empty target.",
-                )
-            )
-
-        # Validate value not empty for fill action
-        if action in ACTIONS_REQUIRING_VALUE and value in ("", "nan"):
-            errors.append(
-                ValidationError(
-                    row=row_num,
-                    column="value",
-                    message=f"Action '{action}' requires a non-empty value.",
-                )
-            )
-
-        # Track step numbers for sequential check
         if step_number is not None:
             step_tracker.setdefault(test_case_id, []).append(step_number)
+
+        # -------------------------------------------------------------
+        # Action Validation & Normalization
+        # -------------------------------------------------------------
+        if action_lower in SUPPORTED_ACTIONS:
+            # Canonical action keyword from existing CSV format
+            if action_lower in ACTIONS_REQUIRING_TARGET and not target:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        column="target",
+                        message=f"Action '{action_lower}' requires a non-empty target.",
+                    )
+                )
+
+            if action_lower in ACTIONS_REQUIRING_VALUE and not value:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        column="value",
+                        message=f"Action '{action_lower}' requires a non-empty value.",
+                    )
+                )
+
+            normalized_steps_by_idx[int(idx)] = {
+                "step_number": step_number,
+                "action": action_lower,
+                "target": target,
+                "value": value,
+                "expected_result": expected_result,
+            }
+
+        else:
+            # Natural-language instruction or action synonym
+            parse_res = parse_step_data(
+                action=raw_action,
+                target=target,
+                value=value,
+                expected_result=expected_result,
+            )
+
+            if not parse_res.is_valid:
+                err_msg = parse_res.error or f"Unsupported action '{raw_action}'. Supported: {SUPPORTED_ACTIONS}."
+                col = "action"
+                if "missing target" in err_msg.lower() or "destination field" in err_msg.lower():
+                    col = "target"
+                elif "missing value" in err_msg.lower() or "destination url" in err_msg.lower():
+                    col = "value"
+                elif "missing expected" in err_msg.lower():
+                    col = "expected_result"
+                errors.append(ValidationError(row=row_num, column=col, message=err_msg))
+            else:
+                act_data = parse_res.action_data
+                norm_act = act_data.action
+                norm_target = act_data.target
+                norm_val = act_data.value
+                norm_exp = act_data.expected_result
+
+                # In natural language instructions, target is required for fill and click,
+                # while verify_text only requires expected_result (unless scoped to container)
+                nl_actions_requiring_target = {"fill", "click"}
+                if norm_act in nl_actions_requiring_target and not norm_target:
+                    errors.append(
+                        ValidationError(
+                            row=row_num,
+                            column="target",
+                            message=f"Action '{norm_act}' requires a non-empty target.",
+                        )
+                    )
+
+                if norm_act in ACTIONS_REQUIRING_VALUE and not norm_val:
+                    errors.append(
+                        ValidationError(
+                            row=row_num,
+                            column="value",
+                            message=f"Action '{norm_act}' requires a non-empty value.",
+                        )
+                    )
+
+                if norm_act == "verify_text" and not norm_exp:
+                    errors.append(
+                        ValidationError(
+                            row=row_num,
+                            column="expected_result",
+                            message="Action 'verify_text' requires expected text to verify.",
+                        )
+                    )
+
+                normalized_steps_by_idx[int(idx)] = {
+                    "step_number": step_number,
+                    "action": norm_act,
+                    "target": norm_target,
+                    "value": norm_val,
+                    "expected_result": norm_exp,
+                }
 
     # --- Sequential step number check per test_case_id ---
     for tc_id, step_nums in step_tracker.items():
@@ -295,17 +363,10 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
     if is_valid:
         for tc_id, group in df.groupby("test_case_id", sort=False):
             steps = []
-            for _, row in group.sort_values("step_number").iterrows():
-                step_number_raw = str(row.get("step_number", "")).strip()
-                steps.append(
-                    {
-                        "step_number": int(float(step_number_raw)),
-                        "action": str(row.get("action", "")).strip().lower(),
-                        "target": _clean_val(row.get("target")),
-                        "value": _clean_val(row.get("value")),
-                        "expected_result": _clean_val(row.get("expected_result")),
-                    }
-                )
+            for original_idx in group.sort_values("step_number").index:
+                step_obj = normalized_steps_by_idx.get(int(original_idx))
+                if step_obj:
+                    steps.append(step_obj)
             test_name = str(group["test_name"].iloc[0]).strip() if "test_name" in group.columns else tc_id
             parsed_cases.append(
                 {

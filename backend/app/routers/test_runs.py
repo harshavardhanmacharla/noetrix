@@ -21,6 +21,10 @@ from app.models.user import User
 from app.schemas.test_run import RunCreateBody, RunStartRequest, TestResultResponse, TestRunResponse
 from app.services.artifact_service import ArtifactService
 from app.services.playwright_runner import run_test_case
+from app.services.result_diagnostics import (
+    build_test_result_response,
+    enrich_test_run_response,
+)
 
 router = APIRouter(tags=["Test Runs"])
 settings = get_settings()
@@ -151,6 +155,30 @@ async def _execute_run(run_id: str, test_case_ids: List[str]) -> None:
                         mime_type="video/webm",
                     )
                     db.add(video_art)
+
+            if outcome.get("steps_path"):
+                stp_path = outcome["steps_path"]
+                existing_steps = (
+                    db.query(Artifact)
+                    .filter(
+                        Artifact.run_id == run_id,
+                        Artifact.result_id == result_id,
+                        Artifact.file_path == stp_path,
+                    )
+                    .first()
+                )
+                if not existing_steps:
+                    steps_art = Artifact(
+                        run_id=run_id,
+                        result_id=result_id,
+                        artifact_type="log",
+                        file_path=stp_path,
+                        file_size=artifact_svc.file_size(
+                            artifact_svc.absolute_path(stp_path)
+                        ),
+                        mime_type="application/json",
+                    )
+                    db.add(steps_art)
 
             db.commit()
 
@@ -289,15 +317,16 @@ async def list_project_runs(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> List[TestRun]:
-    """List all test runs for a project, most recent first."""
+) -> List[TestRunResponse]:
+    """List all test runs for a project, most recent first, with aggregated step counts."""
     verify_project_access(project_id, current_user, db)
-    return (
+    runs = (
         db.query(TestRun)
         .filter(TestRun.project_id == project_id)
         .order_by(TestRun.created_at.desc())
         .all()
     )
+    return [enrich_test_run_response(r, None, db) for r in runs]
 
 
 @router.get("/api/runs/{run_id}", response_model=TestRunResponse)
@@ -305,10 +334,10 @@ async def get_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> TestRun:
-    """Get the status and summary of a specific test run."""
+) -> TestRunResponse:
+    """Get the status and summary of a specific test run with aggregated step counts."""
     run = verify_test_run_access(run_id, current_user, db)
-    return run
+    return enrich_test_run_response(run, None, db)
 
 
 @router.get("/api/runs/{run_id}/results", response_model=List[TestResultResponse])
@@ -316,12 +345,13 @@ async def get_run_results(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> List[TestResult]:
-    """Get all individual test case results for a run."""
+) -> List[TestResultResponse]:
+    """Get all individual test case results for a run with structured step details."""
     verify_test_run_access(run_id, current_user, db)
-    return (
+    results = (
         db.query(TestResult)
         .filter(TestResult.run_id == run_id)
         .order_by(TestResult.started_at)
         .all()
     )
+    return [build_test_result_response(r, db) for r in results]

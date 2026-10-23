@@ -21,6 +21,10 @@ from app.models.project import Project
 from app.models.test_run import Artifact, TestResult, TestRun
 from app.models.user import User
 from app.schemas.test_run import ArtifactResponse, RunReportResponse, TestResultResponse, TestRunResponse
+from app.services.result_diagnostics import (
+    build_run_report_response,
+    enrich_test_run_response,
+)
 
 router = APIRouter(tags=["Reports"])
 settings = get_settings()
@@ -32,7 +36,7 @@ async def get_run_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> RunReportResponse:
-    """Return a full report for a test run including all results and artifacts if user is authorized."""
+    """Return a full report for a test run including all results, structured steps, and artifacts if user is authorized."""
     run = verify_test_run_access(run_id, current_user, db)
 
     results = (
@@ -43,33 +47,7 @@ async def get_run_report(
     )
     artifacts = db.query(Artifact).filter(Artifact.run_id == run_id).all()
 
-    # Build summary
-    total = len(results)
-    passed = sum(1 for r in results if r.status == "passed")
-    failed = sum(1 for r in results if r.status == "failed")
-    errors = sum(1 for r in results if r.status == "error")
-    skipped = sum(1 for r in results if r.status == "skipped")
-
-    duration_sec = None
-    if run.started_at and run.completed_at:
-        duration_sec = (run.completed_at - run.started_at).total_seconds()
-
-    summary = {
-        "total": total,
-        "passed": passed,
-        "failed": failed,
-        "errors": errors,
-        "skipped": skipped,
-        "pass_rate": round(passed / total * 100, 2) if total > 0 else 0.0,
-        "duration_seconds": duration_sec,
-    }
-
-    return RunReportResponse(
-        run=TestRunResponse.model_validate(run),
-        results=[TestResultResponse.model_validate(r) for r in results],
-        artifacts=[ArtifactResponse.model_validate(a) for a in artifacts],
-        summary=summary,
-    )
+    return build_run_report_response(run, results, artifacts, db)
 
 
 @router.get("/api/runs/{run_id}/artifacts", response_model=List[ArtifactResponse])
@@ -284,8 +262,9 @@ async def list_recent_runs(
         if not current_user.is_superuser:
             query = query.filter(Project.org_id.in_(user_org_ids))
 
-    return (
+    runs = (
         query.order_by(TestRun.created_at.desc())
         .limit(limit)
         .all()
     )
+    return [enrich_test_run_response(r, None, db) for r in runs]

@@ -125,31 +125,35 @@ async def upload_test_cases_csv(
         }
 
     created_ids = []
-    for parsed_case in result.parsed_cases:
-        tc = TestCase(
-            project_id=project_id,
-            name=parsed_case["test_name"],
-            created_by=current_user.email,
-            csv_filename=file.filename,
-            is_active=True,
-        )
-        db.add(tc)
-        db.flush()
-
-        for step_data in parsed_case["steps"]:
-            step = TestStep(
-                test_case_id=tc.id,
-                step_number=step_data["step_number"],
-                action=step_data["action"],
-                target=step_data.get("target"),
-                value=step_data.get("value"),
-                expected_result=step_data.get("expected_result"),
+    try:
+        for parsed_case in result.parsed_cases:
+            tc = TestCase(
+                project_id=project_id,
+                name=parsed_case["test_name"],
+                created_by=current_user.email,
+                csv_filename=file.filename,
+                is_active=True,
             )
-            db.add(step)
+            db.add(tc)
+            db.flush()
 
-        created_ids.append({"id": tc.id, "name": tc.name})
+            for step_data in parsed_case["steps"]:
+                step = TestStep(
+                    test_case_id=tc.id,
+                    step_number=step_data["step_number"],
+                    action=step_data["action"],
+                    target=step_data.get("target"),
+                    value=step_data.get("value"),
+                    expected_result=step_data.get("expected_result"),
+                )
+                db.add(step)
 
-    db.commit()
+            created_ids.append({"id": tc.id, "name": tc.name})
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         **val_dump,

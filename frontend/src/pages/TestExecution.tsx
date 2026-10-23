@@ -476,6 +476,18 @@ export const TestExecution: React.FC = () => {
                   </div>
                 )}
 
+                {/* Direct Link to Reports & Evidence */}
+                {!executing && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/reports?run=${activeRun.id}`)}
+                    className="w-full py-2.5 px-4 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>Inspect Step Diagnostics & Evidence in Reports</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
                 {/* Individual Test Case Results */}
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">

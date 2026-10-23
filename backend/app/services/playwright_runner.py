@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,12 +16,65 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote, quote_plus, unquote_plus
 
 from app.config import get_settings
+from app.services.locator_resolver import (
+    AmbiguousElementError,
+    ElementNotFoundError,
+    is_direct_selector,
+    resolve_locator,
+)
 
 settings = get_settings()
 
 NOT_CONFIGURED_MSG = (
     "Playwright browser not configured. Run: playwright install chromium"
 )
+
+
+def categorize_step_error(exc: Exception, action: str, msg: str) -> tuple[str, str]:
+    """
+    Categorize a step exception into a clean, human-readable failure category and display label.
+    Categories:
+      - missing_element: Element could not be found or resolved
+      - ambiguous_target: Multiple elements matched the target
+      - assertion_failure: Text/URL verification assertion failed
+      - timeout: Action or navigation timed out
+      - parsing_failure: Invalid input, missing required target/value, or unsupported action
+      - execution_error: Unhandled browser or execution error
+    """
+    msg_lower = msg.lower()
+    if isinstance(exc, AmbiguousElementError) or "ambiguous target" in msg_lower:
+        return "ambiguous_target", "Ambiguous Target"
+    if isinstance(exc, ElementNotFoundError) or ("could not find any" in msg_lower) or ("not found" in msg_lower and "text" not in msg_lower):
+        return "missing_element", "Missing Element"
+    if isinstance(exc, AssertionError) or "assertion" in msg_lower or "verification failed" in msg_lower or "was not found as visible text" in msg_lower:
+        return "assertion_failure", "Assertion Failed"
+    if isinstance(exc, asyncio.TimeoutError) or "timeout" in msg_lower or "timed out" in msg_lower:
+        return "timeout", "Timeout"
+    if isinstance(exc, ValueError) or "unsupported action" in msg_lower or "required" in msg_lower:
+        return "parsing_failure", "Syntax / Action Error"
+    return "execution_error", "Execution Error"
+
+
+def reconstruct_instruction(action: str, target: str, val_str: str, expected: str) -> str:
+    """Reconstruct a natural-language instruction for display if none was originally recorded."""
+    act = (action or "").strip().lower()
+    tgt = (target or "").strip()
+    val = (val_str or "").strip()
+    exp = (expected or "").strip()
+    if act == "navigate":
+        return f"navigate to {val or tgt or exp or '/'}"
+    if act == "fill":
+        return f"type '{val}' into '{tgt}'"
+    if act == "click":
+        return f"click '{tgt}'"
+    if act == "verify_url":
+        return f"verify current url contains '{exp or tgt or val}'"
+    if act == "verify_text":
+        return f"verify that '{exp or tgt or val}' is visible"
+    if act == "discover_page":
+        return "discover page elements"
+    return f"{act} {tgt}".strip()
+
 SECRET_REFERENCE_PATTERN = re.compile(r"^\$\{secret:([A-Za-z_][A-Za-z0-9_]*)\}$")
 SECRET_REFERENCE_PREFIX = "${secret:"
 
@@ -249,16 +303,18 @@ async def _execute_playwright(
                 f"{'disabled for secret-reference fill steps' if has_secret_reference else 'enabled'}."
             )
             video_handle = page.video
+            step_records: List[Dict[str, Any]] = []
 
             try:
                 log(f"Executing {len(sorted_steps)} test step(s)...")
 
-                for step in sorted_steps:
+                for step_idx, step in enumerate(sorted_steps):
+                    step_start_time = time.perf_counter()
                     action = (step.get("action") or "").strip().lower()
                     target = (step.get("target") or "").strip()
                     value = step.get("value")
                     expected = (step.get("expected_result") or "").strip()
-                    step_num = step.get("step_number", "?")
+                    step_num = step.get("step_number", step_idx + 1)
                     val_str = str(value).strip() if value is not None else ""
 
                     sensitive_target = any(
@@ -275,6 +331,10 @@ async def _execute_playwright(
                         else val_str
                     )
                     safe_expected = expected
+                    orig_instruction = step.get("original_instruction") or reconstruct_instruction(
+                        action, target, safe_value, safe_expected
+                    )
+                    verification_result: Optional[Dict[str, Any]] = None
                     log(
                         f"Step {step_num}: [{action}] target='{target}' "
                         f"value='{safe_value}' expected='{safe_expected}'"
@@ -324,8 +384,21 @@ async def _execute_playwright(
                                 sensitive_values.append(resolved_secret)
                             elif sensitive_target and val_str:
                                 sensitive_values.append(val_str)
-                            log(f"  → Filling selector '{target}' with '{safe_value}'")
-                            await page.fill(target, fill_value)
+                            log(f"  → Filling target '{target}' with '{safe_value}'")
+                            if hasattr(page, "locator") or not hasattr(page, "fill"):
+                                target_locator = await resolve_locator(
+                                    page, target, action="fill", timeout_ms=min(settings.PLAYWRIGHT_TIMEOUT_MS, 5000)
+                                )
+                                if hasattr(target_locator, "fill"):
+                                    await target_locator.fill(
+                                        fill_value, timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                                    )
+                                else:
+                                    await page.fill(
+                                        target, fill_value, timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                                    )
+                            else:
+                                await page.fill(target, fill_value)
                             log(f"  ✓ Filled '{target}'")
 
                         
@@ -335,14 +408,23 @@ async def _execute_playwright(
                                     "Target selector is required for 'click' action."
                                 )
 
-                            log(f"  → Clicking selector '{target}'")
+                            log(f"  → Clicking target '{target}'")
 
-                            # Click without explicitly subscribing to a
-                            # navigation event. Playwright handles normal
-                            # navigation automatically.
-                            await page.locator(target).click(
-                                timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                            target_locator = await resolve_locator(
+                                page, target, action="click", timeout_ms=min(settings.PLAYWRIGHT_TIMEOUT_MS, 5000)
                             )
+                            if hasattr(target_locator, "click"):
+                                await target_locator.click(
+                                    timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                                )
+                            elif hasattr(page, "click"):
+                                await page.click(
+                                    target, timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                                )
+                            else:
+                                await page.locator(target).click(
+                                    timeout=settings.PLAYWRIGHT_TIMEOUT_MS
+                                )
 
                             # Allow a short opportunity for the page to settle.
                             # Some applications update asynchronously.
@@ -362,11 +444,10 @@ async def _execute_playwright(
 
                         elif action == "verify_url":
                             expected_url = expected or val_str or target or app_url
-                            current_url = page.url
                             log(
                                 "  → Verifying URL "
                                 f"(expected contains='{expected_url}', "
-                                f"current='{current_url}')"
+                                f"current='{page.url}')"
                             )
                             full_expected = ""
                             if app_url and (
@@ -378,18 +459,47 @@ async def _execute_playwright(
                                     f"{expected_url.lstrip('/')}"
                                 )
 
-                            match = (
-                                expected_url in current_url
-                                or (
-                                    bool(full_expected)
-                                    and full_expected in current_url
-                                )
+                            url_timeout_s = (
+                                min(settings.PLAYWRIGHT_TIMEOUT_MS / 1000.0, 5.0)
+                                if hasattr(page, "wait_for_timeout")
+                                else 0
                             )
+                            start_url = asyncio.get_event_loop().time()
+                            match = False
+                            current_url = page.url
+
+                            while True:
+                                current_url = page.url
+                                match = (
+                                    expected_url in current_url
+                                    or (
+                                        bool(full_expected)
+                                        and full_expected in current_url
+                                    )
+                                )
+                                if match:
+                                    break
+                                if (asyncio.get_event_loop().time() - start_url) >= url_timeout_s:
+                                    break
+                                await asyncio.sleep(0.05)
+
                             if not match:
+                                verification_result = {
+                                    "type": "verify_url",
+                                    "expected": expected_url,
+                                    "actual": current_url,
+                                    "matched": False,
+                                }
                                 raise AssertionError(
                                     "URL verification failed: expected "
                                     f"'{expected_url}' in current URL '{current_url}'"
                                 )
+                            verification_result = {
+                                "type": "verify_url",
+                                "expected": expected_url,
+                                "actual": current_url,
+                                "matched": True,
+                            }
                             log(
                                 f"  ✓ URL verified successfully: '{expected_url}' "
                                 f"matches '{current_url}'"
@@ -430,13 +540,27 @@ async def _execute_playwright(
                                 page_text = (
                                     await page.locator("body").inner_text()
                                 )
+                                page_text = _redact_sensitive_text(
+                                    page_text, sensitive_values
+                                )
                                 page_text_preview = " ".join(page_text.split())[:500]
+                                verification_result = {
+                                    "type": "verify_text",
+                                    "expected": text_to_find,
+                                    "matched": False,
+                                    "preview": page_text_preview,
+                                }
                                 raise AssertionError(
                                     f"Text '{text_to_find}' was not found as visible "
                                     f"text on the page. Visible page text begins: "
                                     f"'{page_text_preview}'"
                                 ) from text_exc
 
+                            verification_result = {
+                                "type": "verify_text",
+                                "expected": text_to_find,
+                                "matched": True,
+                            }
                             log(f"  ✓ Text '{text_to_find}' found on page.")
 
                         else:
@@ -445,7 +569,23 @@ async def _execute_playwright(
                                 "['navigate', 'fill', 'click', 'verify_url', 'verify_text', 'discover_page']."
                             )
 
+                        step_dur = round((time.perf_counter() - step_start_time) * 1000, 2)
+                        step_records.append({
+                            "step_number": int(step_num) if str(step_num).isdigit() else step_idx + 1,
+                            "action": action,
+                            "target": target or None,
+                            "value": safe_value if safe_value else None,
+                            "expected_result": safe_expected if safe_expected else None,
+                            "original_instruction": orig_instruction,
+                            "status": "passed",
+                            "duration_ms": step_dur,
+                            "category": None,
+                            "failure_reason": None,
+                            "verification_result": verification_result,
+                        })
+
                     except Exception as step_exc:
+                        step_dur = round((time.perf_counter() - step_start_time) * 1000, 2)
                         tb = traceback.format_exc()
                         exc_msg = str(step_exc) or type(step_exc).__name__
                         log(
@@ -453,12 +593,55 @@ async def _execute_playwright(
                         )
                         log(f"Step failure traceback:\n{tb}")
                         status = "failed"
+                        cat_code, cat_label = categorize_step_error(step_exc, action, exc_msg)
+                        safe_reason = _redact_sensitive_text(exc_msg, sensitive_values)
                         error_message = (
-                            f"Step {step_num} ({action}) failed: {exc_msg}"
+                            f"Step {step_num} ({action}) failed: {safe_reason}"
                         )
-                        error_message = _redact_sensitive_text(
-                            error_message, sensitive_values
-                        )
+                        step_records.append({
+                            "step_number": int(step_num) if str(step_num).isdigit() else step_idx + 1,
+                            "action": action,
+                            "target": target or None,
+                            "value": safe_value if safe_value else None,
+                            "expected_result": safe_expected if safe_expected else None,
+                            "original_instruction": orig_instruction,
+                            "status": "failed",
+                            "duration_ms": step_dur,
+                            "category": cat_code,
+                            "failure_reason": safe_reason,
+                            "verification_result": verification_result,
+                        })
+
+                        # Mark all remaining unexecuted steps as skipped
+                        for rem_idx in range(step_idx + 1, len(sorted_steps)):
+                            rem_step = sorted_steps[rem_idx]
+                            rem_action = (rem_step.get("action") or "").strip().lower()
+                            rem_target = (rem_step.get("target") or "").strip()
+                            rem_val = rem_step.get("value")
+                            rem_val_str = str(rem_val).strip() if rem_val is not None else ""
+                            rem_expected = (rem_step.get("expected_result") or "").strip()
+                            rem_step_num = rem_step.get("step_number", rem_idx + 1)
+                            rem_sensitive = any(
+                                w in rem_target.lower()
+                                for w in ("password", "passwd", "secret", "token")
+                            ) or (rem_action == "fill" and SECRET_REFERENCE_PREFIX in rem_val_str)
+                            rem_safe_val = "[REDACTED]" if rem_sensitive else rem_val_str
+                            rem_orig = rem_step.get("original_instruction") or reconstruct_instruction(
+                                rem_action, rem_target, rem_safe_val, rem_expected
+                            )
+                            step_records.append({
+                                "step_number": int(rem_step_num) if str(rem_step_num).isdigit() else rem_idx + 1,
+                                "action": rem_action,
+                                "target": rem_target or None,
+                                "value": rem_safe_val if rem_safe_val else None,
+                                "expected_result": rem_expected or None,
+                                "original_instruction": rem_orig,
+                                "status": "skipped",
+                                "duration_ms": 0.0,
+                                "category": None,
+                                "failure_reason": None,
+                                "verification_result": None,
+                            })
 
                         if sensitive_values:
                             log(
@@ -502,6 +685,16 @@ async def _execute_playwright(
                     except Exception as vid_err:
                         log(f"  ⚠ Could not resolve video path: {vid_err}")
 
+            # Persist structured steps.json artifact
+            steps_file = result_dir / "steps.json"
+            try:
+                steps_file.write_text(
+                    json.dumps(step_records, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception as steps_err:
+                log(f"  ⚠ Could not save steps.json: {steps_err}")
+
     except Exception as runner_exc:
         tb = traceback.format_exc()
         exc_detail = (
@@ -514,12 +707,20 @@ async def _execute_playwright(
         status = "error"
         error_message = _redact_sensitive_text(exc_detail, sensitive_values)
 
+    steps_path_str = (
+        str(result_dir / "steps.json")
+        if (result_dir / "steps.json").exists()
+        else None
+    )
+
     return {
         "status": status,
         "log_lines": log_lines,
         "screenshot_path": screenshot_path,
         "video_path": video_path,
         "error_message": error_message,
+        "steps": step_records,
+        "steps_path": steps_path_str,
         "discovery_path": (
             str(result_dir / "discovery.json")
             if (result_dir / "discovery.json").exists()
