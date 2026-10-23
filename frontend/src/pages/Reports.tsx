@@ -343,21 +343,48 @@ export const Reports: React.FC = () => {
               )}
 
               {/* Recorded Browser Video */}
-              {report.run.video_path && (
-                <div className="card p-5">
-                  <div className="flex items-center gap-2 mb-3 text-slate-800 font-semibold text-sm">
-                    <Film className="w-4 h-4 text-primary-600" />
-                    Browser Session Recording
+              {(() => {
+                const selectedVideoArtifact = selectedResult
+                  ? report.artifacts.find(
+                      (a) => a.result_id === selectedResult.id && a.artifact_type === 'video'
+                    )
+                  : null;
+                const activeVideoArtifact =
+                  selectedVideoArtifact || report.artifacts.find((a) => a.artifact_type === 'video');
+                const activeVideoPath =
+                  selectedResult?.video_path || selectedVideoArtifact?.file_path || report.run.video_path;
+
+                if (!activeVideoPath) return null;
+
+                return (
+                  <div className="card p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm">
+                        <Film className="w-4 h-4 text-primary-600" />
+                        Browser Session Recording
+                        {selectedResult && (
+                          <span className="text-xs font-normal text-slate-500">
+                            — {selectedResult.test_case?.name || `Test Case #${selectedResult.test_case_id?.slice(0, 8)}`}
+                          </span>
+                        )}
+                      </div>
+                      {report.results.length > 1 && (
+                        <span className="text-[11px] text-slate-400">
+                          {selectedVideoArtifact ? 'Showing selected test recording' : 'Showing run recording'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="rounded-lg overflow-hidden bg-black flex justify-center">
+                      <AuthenticatedVideo
+                        key={activeVideoArtifact?.id || activeVideoPath}
+                        artifactId={activeVideoArtifact?.id}
+                        filePath={activeVideoPath}
+                        className="max-h-80 w-full"
+                      />
+                    </div>
                   </div>
-                  <div className="rounded-lg overflow-hidden bg-black flex justify-center">
-                    <AuthenticatedVideo
-                      artifactId={report.artifacts.find((a) => a.artifact_type === 'video')?.id}
-                      filePath={report.run.video_path}
-                      className="max-h-80 w-full"
-                    />
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Test Case Results Breakdown */}
               <div className="card p-5">

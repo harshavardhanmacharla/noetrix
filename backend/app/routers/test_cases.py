@@ -1,5 +1,5 @@
 """
-Test cases router with authentication and tenant isolation.
+Test cases router with authentication, tenant isolation, and natural-language test creation.
 """
 import io
 from typing import List, Optional
@@ -19,13 +19,20 @@ from app.dependencies import (
 from app.models.project import Project
 from app.models.test_case import TestCase, TestStep
 from app.models.user import User
-from app.schemas.test_case import TestCaseResponse
+from app.schemas.test_case import (
+    CreateTestCaseFromInstructionsRequest,
+    ParseInstructionsRequest,
+    ParseInstructionsResponse,
+    ParsedStepItem,
+    TestCaseResponse,
+)
 from app.services.csv_validator import (
     REQUIRED_COLUMNS,
     SUPPORTED_ACTIONS,
     ValidationResult,
     validate_csv,
 )
+from app.services.instruction_parser import parse_instruction
 
 router = APIRouter(tags=["Test Cases"])
 settings = get_settings()
@@ -41,6 +48,204 @@ CSV_TEMPLATE_ROWS = [
     "TC002,Search Test,3,click,.search-btn,,",
     "TC002,Search Test,4,verify_text,.search-results,,Results found",
 ]
+
+
+def extract_instruction_lines(
+    instructions: Optional[List[str]] = None,
+    raw_text: Optional[str] = None,
+) -> List[tuple[int, str]]:
+    """
+    Extract non-empty natural language instruction lines with 1-based line numbers.
+    Skips purely blank or whitespace-only lines gracefully.
+    """
+    lines: List[tuple[int, str]] = []
+    if raw_text is not None:
+        for idx, line in enumerate(raw_text.splitlines(), start=1):
+            stripped = line.strip()
+            if stripped:
+                lines.append((idx, stripped))
+    elif instructions is not None:
+        line_counter = 1
+        for item in instructions:
+            sub_lines = (item or "").splitlines()
+            if not sub_lines:
+                stripped = (item or "").strip()
+                if stripped:
+                    lines.append((line_counter, stripped))
+                    line_counter += 1
+            else:
+                for sub in sub_lines:
+                    stripped = sub.strip()
+                    if stripped:
+                        lines.append((line_counter, stripped))
+                        line_counter += 1
+    return lines
+
+
+@router.post("/api/test-cases/parse-instructions", response_model=ParseInstructionsResponse)
+async def parse_instructions_endpoint(
+    req: ParseInstructionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ParseInstructionsResponse:
+    """
+    Parse a sequence of plain-English test instructions into canonical Playwright actions.
+    Performs tenant/project authorization checks and returns structured validation diagnostics
+    without executing or persisting test steps.
+    """
+    verify_project_access(req.project_id, current_user, db)
+
+    raw_lines = extract_instruction_lines(req.instructions, req.raw_text)
+    if not raw_lines:
+        return ParseInstructionsResponse(
+            is_valid=False,
+            total_lines=0,
+            valid_steps_count=0,
+            steps=[],
+            errors=[{
+                "line": 0,
+                "instruction": "",
+                "message": "No instructions provided. Please enter at least one natural-language instruction.",
+            }],
+        )
+
+    parsed_steps: List[ParsedStepItem] = []
+    errors: List[dict] = []
+
+    for line_num, line_text in raw_lines:
+        res = parse_instruction(line_text)
+        if res.is_valid and res.action_data:
+            parsed_steps.append(
+                ParsedStepItem(
+                    line_number=line_num,
+                    raw_instruction=line_text,
+                    is_valid=True,
+                    action=res.action_data.action,
+                    target=res.action_data.target,
+                    value=res.action_data.value,
+                    expected_result=res.action_data.expected_result,
+                    confidence=res.action_data.confidence,
+                )
+            )
+        else:
+            err_msg = res.error or f"Could not interpret instruction '{line_text}'."
+            parsed_steps.append(
+                ParsedStepItem(
+                    line_number=line_num,
+                    raw_instruction=line_text,
+                    is_valid=False,
+                    error=err_msg,
+                )
+            )
+            errors.append({
+                "line": line_num,
+                "instruction": line_text,
+                "message": err_msg,
+            })
+
+    all_valid = (len(errors) == 0)
+    valid_count = sum(1 for s in parsed_steps if s.is_valid)
+
+    return ParseInstructionsResponse(
+        is_valid=all_valid,
+        total_lines=len(raw_lines),
+        valid_steps_count=valid_count,
+        steps=parsed_steps,
+        errors=errors,
+    )
+
+
+@router.post(
+    "/api/test-cases/create-from-instructions",
+    response_model=TestCaseResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_from_instructions(
+    req: CreateTestCaseFromInstructionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TestCase:
+    """
+    Validate natural-language instructions and persist as an active TestCase with ordered TestSteps.
+    Preserves organization/project isolation. Does not launch execution.
+    """
+    verify_project_access(req.project_id, current_user, db)
+
+    name_clean = req.name.strip()
+    if not name_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Test case name is required.",
+        )
+
+    raw_lines = extract_instruction_lines(req.instructions, req.raw_text)
+    if not raw_lines:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No instructions provided. Please enter at least one natural-language instruction.",
+        )
+
+    valid_steps = []
+    errors = []
+
+    for line_num, line_text in raw_lines:
+        res = parse_instruction(line_text)
+        if res.is_valid and res.action_data:
+            valid_steps.append(res.action_data)
+        else:
+            errors.append(f"Line {line_num} ('{line_text}'): {res.error}")
+
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot save test case with invalid instructions: {'; '.join(errors)}",
+        )
+
+    try:
+        tc = TestCase(
+            project_id=req.project_id,
+            name=name_clean,
+            description=req.description.strip() if req.description else None,
+            created_by=current_user.email,
+            csv_filename="natural_language",
+            is_active=True,
+        )
+        db.add(tc)
+        db.flush()
+
+        for idx, step_data in enumerate(valid_steps, start=1):
+            step = TestStep(
+                test_case_id=tc.id,
+                step_number=idx,
+                action=step_data.action,
+                target=step_data.target,
+                value=step_data.value,
+                expected_result=step_data.expected_result,
+            )
+            db.add(step)
+
+        db.commit()
+        db.refresh(tc)
+        return tc
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post(
+    "/api/projects/{project_id}/test-cases/from-instructions",
+    response_model=TestCaseResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_from_instructions_project_route(
+    project_id: str,
+    req: CreateTestCaseFromInstructionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TestCase:
+    """Project-scoped alias for creating a test case from natural language instructions."""
+    req.project_id = project_id
+    return await create_from_instructions(req, current_user, db)
 
 
 @router.get("/api/test-cases", response_model=List[TestCaseResponse])

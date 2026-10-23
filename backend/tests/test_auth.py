@@ -20,7 +20,7 @@ from app.models.test_case import TestCase
 from app.models.test_run import Artifact, TestRun
 from app.models.user import User
 from app.services.bootstrap import create_initial_admin
-from app.services.rate_limiter import login_rate_limiter
+from app.services.rate_limiter import login_rate_limiter, register_rate_limiter
 from app.services.security import (
     create_access_token,
     decode_access_token,
@@ -42,6 +42,8 @@ def clean_db():
     # Reset rate limiter
     with login_rate_limiter._lock:
         login_rate_limiter._failures.clear()
+    with register_rate_limiter._lock:
+        register_rate_limiter._failures.clear()
     yield
     Base.metadata.drop_all(bind=engine)
 

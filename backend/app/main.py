@@ -24,7 +24,7 @@ from app.models.project import Project
 from app.models.test_case import TestCase
 from app.models.test_run import TestRun
 from app.models.user import User
-from app.routers import auth, health, organizations, projects, reports, test_cases, test_runs
+from app.routers import auth, health, organizations, project_variables, projects, reports, test_cases, test_runs
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -73,6 +73,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(organizations.router)
 app.include_router(projects.router)
+app.include_router(project_variables.router)
 app.include_router(test_cases.router)
 app.include_router(test_runs.router)
 app.include_router(reports.router)

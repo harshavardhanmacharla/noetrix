@@ -58,11 +58,13 @@ async def _execute_run(run_id: str, test_case_ids: List[str]) -> None:
     for tc_id in test_case_ids:
         # 2. Create TestResult and extract steps in a short transaction
         result_id = None
+        project_id = None
         steps = []
         with SessionLocal() as db:
             tc = db.query(TestCase).filter(TestCase.id == tc_id).first()
             if not tc:
                 continue
+            project_id = tc.project_id
 
             result = TestResult(
                 run_id=run_id,
@@ -95,6 +97,7 @@ async def _execute_run(run_id: str, test_case_ids: List[str]) -> None:
             artifacts_dir=settings.ARTIFACTS_DIR,
             run_id=run_id,
             test_case_id=result_id,
+            project_id=project_id,
         )
 
         # 4. Save results and artifacts in a short transaction

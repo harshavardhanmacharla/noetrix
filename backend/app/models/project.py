@@ -47,3 +47,6 @@ class Project(Base):
     test_runs: Mapped[list["TestRun"]] = relationship(  # noqa: F821
         "TestRun", back_populates="project", cascade="all, delete-orphan"
     )
+    variables: Mapped[list["ProjectVariable"]] = relationship(  # noqa: F821
+        "ProjectVariable", back_populates="project", cascade="all, delete-orphan"
+    )

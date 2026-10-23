@@ -94,9 +94,9 @@ def test_all_supported_actions_are_valid():
     """Each supported action in a minimal valid row should not produce an action error."""
     rows = []
     for i, action in enumerate(SUPPORTED_ACTIONS, start=1):
-        target = "#el" if action in ("fill", "click", "verify_text") else ""
+        target = "#el" if action in ("fill", "click", "verify_text", "clear", "check", "uncheck", "verify_not_text") else ""
         value = "val" if action in ("fill", "navigate") else ""
-        expected = "text" if action == "verify_text" else ""
+        expected = "text" if action in ("verify_text", "verify_not_text") else ""
         rows.append(f"TC{i:03d},Test {i},{i},{action},{target},{value},{expected}")
 
     content = make_csv(*rows)
@@ -433,3 +433,36 @@ def test_action_validation_and_required_fields_remain_enforced():
     res_verify_text = validate_csv(make_csv("TC001,Test,1,verify_text,,,expected"))
     assert res_verify_text.is_valid is False
     assert any(e.column == "target" for e in res_verify_text.errors)
+
+
+def test_select_option_csv_validation():
+    """Verify select_option validation in structured CSV and natural language instructions."""
+    # Valid structured select_option
+    valid_csv = make_csv("TC001,Test,1,select_option,#state,California,")
+    res_valid = validate_csv(valid_csv)
+    assert res_valid.is_valid is True
+    step = res_valid.parsed_cases[0]["steps"][0]
+    assert step["action"] == "select_option"
+    assert step["target"] == "#state"
+    assert step["value"] == "California"
+
+    # Missing target
+    no_target_csv = make_csv("TC001,Test,1,select_option,,California,")
+    res_no_tgt = validate_csv(no_target_csv)
+    assert res_no_tgt.is_valid is False
+    assert any(e.column == "target" and "requires a non-empty target" in e.message for e in res_no_tgt.errors)
+
+    # Missing value
+    no_val_csv = make_csv("TC001,Test,1,select_option,#state,,")
+    res_no_val = validate_csv(no_val_csv)
+    assert res_no_val.is_valid is False
+    assert any(e.column == "value" and "requires a non-empty value" in e.message for e in res_no_val.errors)
+
+    # Natural language in action column
+    nl_csv = make_csv("TC001,Test,1,select \"Admin\" from the \"Role\" dropdown,,,")
+    res_nl = validate_csv(nl_csv)
+    assert res_nl.is_valid is True
+    nl_step = res_nl.parsed_cases[0]["steps"][0]
+    assert nl_step["action"] == "select_option"
+    assert nl_step["target"] == "Role"
+    assert nl_step["value"] == "Admin"

@@ -89,6 +89,7 @@ class TestResultResponse(BaseModel):
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     screenshot_path: Optional[str] = None
+    video_path: Optional[str] = None
     log_output: Optional[str] = None
     steps: List[StepDetailResponse] = []
     step_summary: Optional[StepSummaryResponse] = None

@@ -8,7 +8,7 @@ from typing import Dict, List
 
 
 class LoginRateLimiter:
-    """Thread-safe sliding-window rate limiter for failed login attempts."""
+    """Thread-safe sliding-window rate limiter for failed login attempts and sensitive auth actions."""
 
     def __init__(self, max_attempts: int = 5, window_seconds: int = 300):
         self.max_attempts = max_attempts
@@ -34,11 +34,18 @@ class LoginRateLimiter:
             self._cleanup_old_attempts(key, now)
             self._failures[key].append(now)
 
+    def record_attempt(self, key: str) -> None:
+        """Record an attempt for rate limiting purposes."""
+        self.record_failure(key)
+
     def reset(self, key: str) -> None:
-        """Reset failed attempts for key upon successful authentication."""
+        """Reset failed attempts for key upon successful operation."""
         with self._lock:
             if key in self._failures:
                 del self._failures[key]
 
 
 login_rate_limiter = LoginRateLimiter(max_attempts=5, window_seconds=300)
+register_rate_limiter = LoginRateLimiter(max_attempts=10, window_seconds=300)
+password_reset_request_rate_limiter = LoginRateLimiter(max_attempts=5, window_seconds=300)
+password_reset_confirm_rate_limiter = LoginRateLimiter(max_attempts=5, window_seconds=300)

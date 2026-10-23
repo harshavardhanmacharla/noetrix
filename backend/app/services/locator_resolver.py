@@ -231,7 +231,45 @@ async def resolve_locator(
     # -------------------------------------------------------------------------
     candidates: List[Tuple[str, Any]] = []
 
-    if normalized_action == "click":
+    if normalized_action in ("check", "uncheck"):
+        # Prioritize checkboxes by accessible role and label
+        if hasattr(page, "get_by_role"):
+            candidates.append(
+                ("checkbox role (exact)", page.get_by_role("checkbox", name=clean_target, exact=True))
+            )
+            candidates.append(
+                ("checkbox role (case-insensitive)", page.get_by_role("checkbox", name=clean_target, exact=False))
+            )
+
+        if hasattr(page, "get_by_label"):
+            candidates.append(
+                ("checkbox label (exact)", page.get_by_label(clean_target, exact=True))
+            )
+            candidates.append(
+                ("checkbox label (case-insensitive)", page.get_by_label(clean_target, exact=False))
+            )
+
+        if hasattr(page, "locator"):
+            safe_id = re.sub(r"[^\w\-]", "", clean_target)
+            if safe_id:
+                candidates.append(
+                    (
+                        "checkbox input attribute",
+                        page.locator(
+                            f"input[type='checkbox'][name='{safe_id}' i], input[type='checkbox'][id='{safe_id}' i]"
+                        ),
+                    )
+                )
+
+        if hasattr(page, "get_by_text"):
+            candidates.append(
+                ("visible text (exact)", page.get_by_text(clean_target, exact=True))
+            )
+            candidates.append(
+                ("visible text (case-insensitive)", page.get_by_text(clean_target, exact=False))
+            )
+
+    elif normalized_action == "click":
         # Prioritize buttons and links by accessible name
         if hasattr(page, "get_by_role"):
             candidates.append(
@@ -273,7 +311,7 @@ async def resolve_locator(
                 ("visible text (case-insensitive)", page.get_by_text(clean_target, exact=False))
             )
 
-    elif normalized_action == "fill":
+    elif normalized_action in ("fill", "clear"):
         # Prioritize form labels, placeholders, and textbox roles
         if hasattr(page, "get_by_label"):
             candidates.append(
@@ -318,6 +356,44 @@ async def resolve_locator(
                         ),
                     )
                 )
+
+    elif normalized_action == "select_option":
+        # Prioritize combobox / select elements by accessible role and label
+        if hasattr(page, "get_by_role"):
+            candidates.append(
+                ("combobox role (exact)", page.get_by_role("combobox", name=clean_target, exact=True))
+            )
+            candidates.append(
+                ("combobox role (case-insensitive)", page.get_by_role("combobox", name=clean_target, exact=False))
+            )
+
+        if hasattr(page, "get_by_label"):
+            candidates.append(
+                ("dropdown label (exact)", page.get_by_label(clean_target, exact=True))
+            )
+            candidates.append(
+                ("dropdown label (case-insensitive)", page.get_by_label(clean_target, exact=False))
+            )
+
+        if hasattr(page, "locator"):
+            safe_id = re.sub(r"[^\w\-]", "", clean_target)
+            if safe_id:
+                candidates.append(
+                    (
+                        "select name or id attribute",
+                        page.locator(
+                            f"select[name='{safe_id}' i], select[id='{safe_id}' i]"
+                        ),
+                    )
+                )
+
+        if hasattr(page, "get_by_text"):
+            candidates.append(
+                ("visible text (exact)", page.get_by_text(clean_target, exact=True))
+            )
+            candidates.append(
+                ("visible text (case-insensitive)", page.get_by_text(clean_target, exact=False))
+            )
 
     else:
         # Generic semantic fallback for other actions
@@ -385,15 +461,25 @@ async def resolve_locator(
         await asyncio.sleep(0.05)
 
     # No elements matched any strategy
+    if normalized_action in ("check", "uncheck"):
+        raise ElementNotFoundError(
+            f"Could not find any checkbox matching '{clean_target}'. "
+            "Searched checkbox roles, accessible labels, and input attributes."
+        )
     if normalized_action == "click":
         raise ElementNotFoundError(
             f"Could not find any clickable element matching '{clean_target}'. "
             "Searched button roles, link roles, accessible labels, and visible text."
         )
-    if normalized_action == "fill":
+    if normalized_action in ("fill", "clear"):
         raise ElementNotFoundError(
             f"Could not find any input field matching '{clean_target}'. "
             "Searched form labels, placeholders, textbox roles, and input attributes."
+        )
+    if normalized_action == "select_option":
+        raise ElementNotFoundError(
+            f"Could not find any dropdown matching '{clean_target}'. "
+            "Searched combobox roles, accessible labels, and select element attributes."
         )
 
     raise ElementNotFoundError(

@@ -3,6 +3,7 @@ Unit tests for Noetrix Natural-Language Instruction Parser.
 Verifies parsing of common plain-English test instructions, synonym normalization,
 missing-parameter error handling, ambiguity detection, and backward compatibility.
 """
+from typing import Optional
 import pytest
 from app.services.instruction_parser import (
     InstructionParseResult,
@@ -578,4 +579,427 @@ def test_phase6_structured_step_synonym_normalization():
     assert r3.is_valid is True
     assert r3.action_data.action == "click"
     assert r3.action_data.target == "Accept Terms"
+
+
+# =============================================================================
+# Phase 10: Extended Natural-Language Instruction Tests
+# =============================================================================
+
+@pytest.mark.parametrize(
+    "instruction, expected_text, expected_target",
+    [
+        ('verify that text "Invalid login" is not visible', "Invalid login", None),
+        ('verify that text "Loading..." is not visible in "#status-bar"', "Loading...", "#status-bar"),
+        ('check that text "Error 500" is not visible', "Error 500", None),
+        ('assert that "Session Expired" does not appear', "Session Expired", None),
+        ('ensure text "Payment Failed" does not appear in "#alert-box"', "Payment Failed", "#alert-box"),
+        ('confirm that "Processing..." is not displayed', "Processing...", None),
+        ('verify that the page does not contain "Database Error"', "Database Error", None),
+        ('verify that the page does not display text "Fatal error"', "Fatal error", None),
+        ('ensure "Access Denied" is not shown', "Access Denied", None),
+        ('confirm "Please wait" is not shown on "#modal"', "Please wait", "#modal"),
+    ],
+)
+def test_phase10_negative_text_verification_success(instruction: str, expected_text: str, expected_target: Optional[str]):
+    res = parse_instruction(instruction)
+    assert res.is_valid is True
+    assert res.action_data is not None
+    assert res.action_data.action == "verify_not_text"
+    assert res.action_data.expected_result == expected_text
+    assert res.action_data.target == expected_target
+    assert res.error is None
+
+
+def test_phase10_negative_text_verification_missing_text():
+    for text in [
+        "verify text is not visible",
+        "verify that is not visible",
+        "check that text does not appear",
+        "ensure text is not displayed",
+    ]:
+        res = parse_instruction(text)
+        assert res.is_valid is False
+        assert "Missing expected text" in (res.error or "")
+
+
+@pytest.mark.parametrize(
+    "instruction, expected_url",
+    [
+        ('verify url does not contain "/login"', "/login"),
+        ('verify that the url does not contain "https://example.com/error"', "https://example.com/error"),
+        ('check current url is not "http://localhost:3000/auth"', "http://localhost:3000/auth"),
+        ('assert url does not contain "/forbidden"', "/forbidden"),
+        ('ensure that current url does not contain "/maintenance"', "/maintenance"),
+        ('confirm url is not "/splash"', "/splash"),
+    ],
+)
+def test_phase10_negative_url_verification_success(instruction: str, expected_url: str):
+    res = parse_instruction(instruction)
+    assert res.is_valid is True
+    assert res.action_data is not None
+    assert res.action_data.action == "verify_not_url"
+    assert res.action_data.expected_result == expected_url
+    assert res.error is None
+
+
+def test_phase10_negative_url_verification_missing_url():
+    for text in [
+        "verify url does not contain",
+        "check current url is not",
+        "ensure url does not match",
+    ]:
+        res = parse_instruction(text)
+        assert res.is_valid is False
+        assert "Missing expected URL" in (res.error or "")
+
+
+def test_phase10_container_first_assertions():
+    # Positive container-first
+    r1 = parse_instruction('verify that "#header" contains "Dashboard"')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "verify_text"
+    assert r1.action_data.target == "#header"
+    assert r1.action_data.expected_result == "Dashboard"
+
+    r2 = parse_instruction('check the "#notification" displays text "Profile updated"')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "verify_text"
+    assert r2.action_data.target == "#notification"
+    assert r2.action_data.expected_result == "Profile updated"
+
+    # Negative container-first
+    r3 = parse_instruction('verify that "#header" does not contain "Welcome Guest"')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "verify_not_text"
+    assert r3.action_data.target == "#header"
+    assert r3.action_data.expected_result == "Welcome Guest"
+
+    r4 = parse_instruction('check "#alert" does not display "System Failure"')
+    assert r4.is_valid is True
+    assert r4.action_data.action == "verify_not_text"
+    assert r4.action_data.target == "#alert"
+    assert r4.action_data.expected_result == "System Failure"
+
+
+@pytest.mark.parametrize(
+    "instruction, expected_action, expected_target",
+    [
+        ('check "#terms-agree"', "check", "#terms-agree"),
+        ('check the "Remember Me" checkbox', "check", "Remember Me"),
+        ('check the checkbox "I agree to terms"', "check", "I agree to terms"),
+        ('check box "#marketing"', "check", "#marketing"),
+        ('mark "Subscribe to newsletter" as checked', "check", "Subscribe to newsletter"),
+        ('uncheck "#newsletter-opt-in"', "uncheck", "#newsletter-opt-in"),
+        ('uncheck the "Remember Password" checkbox', "uncheck", "Remember Password"),
+        ('deselect the checkbox "Auto-renew"', "uncheck", "Auto-renew"),
+        ('unmark "Opt-out of tracking"', "uncheck", "Opt-out of tracking"),
+    ],
+)
+def test_phase10_checkbox_actions_success(instruction: str, expected_action: str, expected_target: str):
+    res = parse_instruction(instruction)
+    assert res.is_valid is True
+    assert res.action_data is not None
+    assert res.action_data.action == expected_action
+    assert res.action_data.target == expected_target
+    assert res.error is None
+
+
+def test_phase10_checkbox_disambiguation_from_check_text():
+    # "check that ..." is verification, NOT checkbox check
+    r1 = parse_instruction('check that text "Success" is visible')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "verify_text"
+
+    # "check current url ..." is url verification
+    r2 = parse_instruction('check current url is "https://example.com"')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "verify_url"
+
+    # "check the checkbox 'Terms'" is checkbox check
+    r3 = parse_instruction('check the checkbox "Terms"')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "check"
+    assert r3.action_data.target == "Terms"
+
+
+def test_phase10_checkbox_missing_target_fails():
+    res1 = parse_instruction("check")
+    assert res1.is_valid is False
+    assert "Missing target" in (res1.error or "")
+
+    res2 = parse_instruction("uncheck")
+    assert res2.is_valid is False
+    assert "Missing target" in (res2.error or "")
+
+    res3 = parse_instruction("deselect")
+    assert res3.is_valid is False
+    assert "Missing target" in (res3.error or "")
+
+
+@pytest.mark.parametrize(
+    "instruction, expected_target",
+    [
+        ('clear "#search-box"', "#search-box"),
+        ('clear the "Username" field', "Username"),
+        ('clear the input "#comment"', "#comment"),
+        ('empty the "Notes" field', "Notes"),
+        ('empty "#password-input"', "#password-input"),
+        ('erase "#temp-field"', "#temp-field"),
+    ],
+)
+def test_phase10_field_clearing_success(instruction: str, expected_target: str):
+    res = parse_instruction(instruction)
+    assert res.is_valid is True
+    assert res.action_data is not None
+    assert res.action_data.action == "clear"
+    assert res.action_data.target == expected_target
+    assert res.error is None
+
+
+def test_phase10_field_clearing_missing_target_fails():
+    for text in ["clear", "empty", "erase", "clear the field", "empty the input"]:
+        res = parse_instruction(text)
+        assert res.is_valid is False
+        assert "Missing target" in (res.error or "")
+
+
+@pytest.mark.parametrize(
+    "instruction, expected_target, expected_value",
+    [
+        ('In the "Username" field, type "admin"', "Username", "admin"),
+        ('In "Email", enter "user@example.com"', "Email", "user@example.com"),
+        ('On "#search-box", enter "shoes"', "#search-box", "shoes"),
+        ('Into the "Password" input, write "${secret:API_KEY}"', "Password", "${secret:API_KEY}"),
+        ('On the "Notes" field, fill with "Urgent item"', "Notes", "Urgent item"),
+    ],
+)
+def test_phase10_inverted_input_phrasing(instruction: str, expected_target: str, expected_value: str):
+    res = parse_instruction(instruction)
+    assert res.is_valid is True
+    assert res.action_data is not None
+    assert res.action_data.action == "fill"
+    assert res.action_data.target == expected_target
+    assert res.action_data.value == expected_value
+    assert res.error is None
+
+
+def test_phase10_conversational_prefixes():
+    r1 = parse_instruction('Please click the "Submit" button')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "click"
+    assert r1.action_data.target == "Submit"
+
+    r2 = parse_instruction('Now navigate to https://example.com/app')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "navigate"
+    assert r2.action_data.value == "https://example.com/app"
+
+    r3 = parse_instruction('Next, enter "admin" into "#username"')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "fill"
+    assert r3.action_data.target == "#username"
+    assert r3.action_data.value == "admin"
+
+    r4 = parse_instruction('And now verify that text "Welcome" is visible')
+    assert r4.is_valid is True
+    assert r4.action_data.action == "verify_text"
+    assert r4.action_data.expected_result == "Welcome"
+
+
+def test_phase10_trailing_punctuation():
+    # Trailing period on click
+    r1 = parse_instruction('Click the "Submit" button.')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "click"
+    assert r1.action_data.target == "Submit"
+
+    # Trailing period on navigate
+    r2 = parse_instruction('Navigate to https://example.com/login.')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "navigate"
+    assert r2.action_data.value == "https://example.com/login"
+
+    # Trailing exclamation mark outside quotes
+    r3 = parse_instruction('Clear the "#notes" field!')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "clear"
+    assert r3.action_data.target == "#notes"
+
+    # Preserves punctuation inside quotes
+    r4 = parse_instruction('verify that page contains "Don\'t lose your API key!".')
+    assert r4.is_valid is True
+    assert r4.action_data.action == "verify_text"
+    assert r4.action_data.expected_result == "Don't lose your API key!"
+
+
+def test_phase10_new_verbs_compound_ambiguity_rejection():
+    # Compound instructions involving clear, uncheck
+    r1 = parse_instruction('clear "#username" and then type "admin" into "#username"')
+    assert r1.is_valid is False
+    assert "Ambiguous compound instruction" in (r1.error or "")
+
+    r2 = parse_instruction('uncheck "#newsletter" and click "Submit"')
+    assert r2.is_valid is False
+    assert "Ambiguous compound instruction" in (r2.error or "")
+
+
+def test_phase10_step_data_canonical_actions():
+    # clear
+    s1 = parse_step_data(action="clear", target="#search")
+    assert s1.is_valid is True
+    assert s1.action_data.action == "clear"
+    assert s1.action_data.target == "#search"
+
+    # check
+    s2 = parse_step_data(action="check", target="Remember Me")
+    assert s2.is_valid is True
+    assert s2.action_data.action == "check"
+    assert s2.action_data.target == "Remember Me"
+
+    # uncheck
+    s3 = parse_step_data(action="uncheck", target="#newsletter")
+    assert s3.is_valid is True
+    assert s3.action_data.action == "uncheck"
+    assert s3.action_data.target == "#newsletter"
+
+    # verify_not_text
+    s4 = parse_step_data(action="verify_not_text", target="#status", expected_result="Failed")
+    assert s4.is_valid is True
+    assert s4.action_data.action == "verify_not_text"
+    assert s4.action_data.target == "#status"
+    assert s4.action_data.expected_result == "Failed"
+
+    # verify_not_url
+    s5 = parse_step_data(action="verify_not_url", expected_result="/error")
+    assert s5.is_valid is True
+    assert s5.action_data.action == "verify_not_url"
+    assert s5.action_data.expected_result == "/error"
+
+
+# =============================================================================
+# Phase 11 Tests: Intelligence, Safeguards & Normalization Refinements
+# =============================================================================
+
+def test_phase11_conditional_safeguards():
+    """Verify conditional instructions are safely rejected rather than guessed."""
+    r1 = parse_instruction('if "Error" appears, click "Retry"')
+    assert r1.is_valid is False
+    assert "conditional" in (r1.error or "").lower()
+    assert "Unsupported instruction" in (r1.error or "")
+
+    r2 = parse_instruction("if modal is visible, close it")
+    assert r2.is_valid is False
+    assert "conditional" in (r2.error or "").lower()
+
+
+def test_phase11_wait_safeguards():
+    """Verify explicit wait/pause instructions are safely rejected with clear rationale."""
+    r1 = parse_instruction("wait 5 seconds")
+    assert r1.is_valid is False
+    assert "wait/sleep" in (r1.error or "").lower()
+    assert "automatic bounded dynamic waits" in (r1.error or "")
+
+    r2 = parse_instruction("pause for 3 seconds")
+    assert r2.is_valid is False
+    assert "wait/sleep" in (r2.error or "").lower()
+
+
+def test_phase11_state_assertion_safeguards():
+    """Verify unsupported element state assertions are safely rejected."""
+    r1 = parse_instruction('verify button "Submit" is disabled')
+    assert r1.is_valid is False
+    assert "element state assertions" in (r1.error or "").lower()
+
+    r2 = parse_instruction('assert checkbox "Terms" is checked')
+    assert r2.is_valid is False
+    assert "element state assertions" in (r2.error or "").lower()
+
+
+def test_phase12_dropdown_selection():
+    """Verify first-class dropdown selection support ('select <opt> from <target>') and backward compatibility."""
+    r1 = parse_instruction('select "California" from "#state"')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "select_option"
+    assert r1.action_data.target == "#state"
+    assert r1.action_data.value == "California"
+
+    r2 = parse_instruction('choose "Express Shipping" from dropdown "#shipping"')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "select_option"
+    assert r2.action_data.target == "#shipping"
+    assert r2.action_data.value == "Express Shipping"
+
+    r2b = parse_instruction('select "Admin" from the "Role" dropdown')
+    assert r2b.is_valid is True
+    assert r2b.action_data.action == "select_option"
+    assert r2b.action_data.target == "Role"
+    assert r2b.action_data.value == "Admin"
+
+    r2c = parse_instruction('in the "Role" dropdown, select "Admin"')
+    assert r2c.is_valid is True
+    assert r2c.action_data.action == "select_option"
+    assert r2c.action_data.target == "Role"
+    assert r2c.action_data.value == "Admin"
+
+    r2d = parse_instruction('from "#state", choose "California"')
+    assert r2d.is_valid is True
+    assert r2d.action_data.action == "select_option"
+    assert r2d.action_data.target == "#state"
+    assert r2d.action_data.value == "California"
+
+    # Incomplete dropdown instructions
+    r_err1 = parse_instruction('select from "#state"')
+    assert r_err1.is_valid is False
+    assert "missing value" in (r_err1.error or "").lower()
+
+    r_err2 = parse_instruction('choose "California" from')
+    assert r_err2.is_valid is False
+    assert "missing target" in (r_err2.error or "").lower()
+
+    # Valid clicking on options is preserved
+    r3 = parse_instruction('select option "Credit Card"')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "click"
+    assert r3.action_data.target == "Credit Card"
+
+    r4 = parse_instruction('choose "Dark Mode"')
+    assert r4.is_valid is True
+    assert r4.action_data.action == "click"
+    assert r4.action_data.target == "Dark Mode"
+
+
+def test_phase11_descriptor_cleaning_enhancements():
+    """Verify enhanced target descriptor cleaning for 'text in', 'box', and 'radio button'."""
+    r1 = parse_instruction('erase the text in "#notes"')
+    assert r1.is_valid is True
+    assert r1.action_data.action == "clear"
+    assert r1.action_data.target == "#notes"
+
+    r2 = parse_instruction('clear the text in "Username"')
+    assert r2.is_valid is True
+    assert r2.action_data.action == "clear"
+    assert r2.action_data.target == "Username"
+
+    r3 = parse_instruction('uncheck the "Receive marketing emails" box')
+    assert r3.is_valid is True
+    assert r3.action_data.action == "uncheck"
+    assert r3.action_data.target == "Receive marketing emails"
+
+    r4 = parse_instruction('click the "Express 2-Day Air ($15.00)" radio button')
+    assert r4.is_valid is True
+    assert r4.action_data.action == "click"
+    assert r4.action_data.target == "Express 2-Day Air ($15.00)"
+
+
+def test_phase11_missing_target_checkbox_edge_cases():
+    """Verify 'mark as checked' and 'mark as unchecked' missing-target edge cases are rejected."""
+    r1 = parse_instruction("mark as checked")
+    assert r1.is_valid is False
+    assert "Missing target" in (r1.error or "")
+
+    r2 = parse_instruction("mark as unchecked")
+    assert r2.is_valid is False
+    assert "Missing target" in (r2.error or "")
+
+
 

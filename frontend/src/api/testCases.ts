@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { TestCase, ValidationResult } from '../types';
+import { TestCase, ValidationResult, ParseInstructionsResponse } from '../types';
 
 export const testCasesApi = {
   list: async (projectId?: string): Promise<TestCase[]> => {
@@ -10,6 +10,34 @@ export const testCasesApi = {
 
   get: async (id: string): Promise<TestCase> => {
     const res = await apiClient.get(`/api/test-cases/${id}`);
+    return res.data;
+  },
+
+  parseInstructions: async (
+    projectId: string,
+    instructions: string[] | string
+  ): Promise<ParseInstructionsResponse> => {
+    const payload =
+      typeof instructions === 'string'
+        ? { project_id: projectId, raw_text: instructions }
+        : { project_id: projectId, instructions };
+    const res = await apiClient.post('/api/test-cases/parse-instructions', payload);
+    return res.data;
+  },
+
+  createFromInstructions: async (
+    projectId: string,
+    name: string,
+    instructions: string[] | string,
+    description?: string
+  ): Promise<TestCase> => {
+    const payload = {
+      project_id: projectId,
+      name,
+      description,
+      ...(typeof instructions === 'string' ? { raw_text: instructions } : { instructions }),
+    };
+    const res = await apiClient.post('/api/test-cases/create-from-instructions', payload);
     return res.data;
   },
 

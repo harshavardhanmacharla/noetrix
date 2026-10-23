@@ -348,3 +348,64 @@ async def test_csv_parsed_steps_reach_locator_resolver_and_execute(monkeypatch, 
     assert page.pass_field.filled_with == "secretpass"
     # Semantic target "Sign In" was resolved via button role and clicked
     assert page.submit_btn.clicked is True
+
+
+def test_phase10_csv_integration_with_new_actions():
+    """Verify that Phase 10 actions (clear, check, uncheck, negative assertions, inverted fill) validate in CSV."""
+    csv_bytes = make_csv(
+        'TC010,Phase 10 Flow,1,visit "https://example.com/app",,,',
+        'TC010,Phase 10 Flow,2,clear the "Username" field,,,',
+        "TC010,Phase 10 Flow,3,\"In 'Username', type 'admin'\",,,",
+        'TC010,Phase 10 Flow,4,check the "Remember Me" checkbox,,,',
+        'TC010,Phase 10 Flow,5,uncheck the "Marketing Emails" checkbox,,,',
+        'TC010,Phase 10 Flow,6,Please click the "Submit" button.,,,',
+        'TC010,Phase 10 Flow,7,verify that text "Invalid Credentials" is not visible,,,',
+        'TC010,Phase 10 Flow,8,verify url does not contain "/error",,,',
+        'TC010,Phase 10 Flow,9,verify that "#header" contains "Dashboard",,,',
+    )
+    val_res = validate_csv(csv_bytes)
+    assert val_res.is_valid is True
+    assert val_res.errors == []
+    assert len(val_res.parsed_cases) == 1
+
+    steps = val_res.parsed_cases[0]["steps"]
+    assert len(steps) == 9
+
+    # Step 1: visit -> navigate
+    assert steps[0]["action"] == "navigate"
+    assert steps[0]["value"] == "https://example.com/app"
+
+    # Step 2: clear
+    assert steps[1]["action"] == "clear"
+    assert steps[1]["target"] == "Username"
+
+    # Step 3: Inverted fill
+    assert steps[2]["action"] == "fill"
+    assert steps[2]["target"] == "Username"
+    assert steps[2]["value"] == "admin"
+
+    # Step 4: check
+    assert steps[3]["action"] == "check"
+    assert steps[3]["target"] == "Remember Me"
+
+    # Step 5: uncheck
+    assert steps[4]["action"] == "uncheck"
+    assert steps[4]["target"] == "Marketing Emails"
+
+    # Step 6: conversational prefix and trailing punctuation click
+    assert steps[5]["action"] == "click"
+    assert steps[5]["target"] == "Submit"
+
+    # Step 7: negative text
+    assert steps[6]["action"] == "verify_not_text"
+    assert steps[6]["expected_result"] == "Invalid Credentials"
+
+    # Step 8: negative url
+    assert steps[7]["action"] == "verify_not_url"
+    assert steps[7]["expected_result"] == "/error"
+
+    # Step 9: container-first text
+    assert steps[8]["action"] == "verify_text"
+    assert steps[8]["target"] == "#header"
+    assert steps[8]["expected_result"] == "Dashboard"
+

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AuthContextType, LoginCredentials, User, UserProfile } from '../types';
+import { AuthContextType, LoginCredentials, RegisterPayload, User, UserProfile } from '../types';
 import { authApi } from '../api/auth';
 import { setAuthToken, setOnUnauthorized } from '../api/client';
 
@@ -91,6 +91,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const register = useCallback(async (data: RegisterPayload) => {
+    const tokenResp = await authApi.register(data);
+    setToken(tokenResp.access_token);
+    setUser(tokenResp.user);
+    setIsAuthenticated(true);
+
+    try {
+      const userProfile = await authApi.me();
+      setProfile(userProfile);
+      setUser(userProfile.user);
+    } catch {
+      setProfile({
+        user: tokenResp.user,
+        memberships: [],
+      });
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -105,7 +123,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-
   return (
     <AuthContext.Provider
       value={{
@@ -115,6 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated,
         isLoading,
         login,
+        register,
         logout,
         refreshSession,
       }}

@@ -22,13 +22,26 @@ REQUIRED_COLUMNS = [
     "expected_result",
 ]
 
-SUPPORTED_ACTIONS = ["navigate", "fill", "click", "verify_url", "verify_text", "discover_page"]
+SUPPORTED_ACTIONS = [
+    "navigate",
+    "fill",
+    "click",
+    "verify_url",
+    "verify_text",
+    "discover_page",
+    "clear",
+    "check",
+    "uncheck",
+    "verify_not_text",
+    "verify_not_url",
+    "select_option",
+]
 
 # Actions that require a non-empty target (CSS selector or URL)
-ACTIONS_REQUIRING_TARGET = {"fill", "click", "verify_text"}
+ACTIONS_REQUIRING_TARGET = {"fill", "click", "verify_text", "clear", "check", "uncheck", "verify_not_text", "select_option"}
 
 # Actions that require a non-empty value
-ACTIONS_REQUIRING_VALUE = {"fill"}
+ACTIONS_REQUIRING_VALUE = {"fill", "select_option"}
 
 
 class ValidationError(BaseModel):
@@ -304,7 +317,7 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
 
                 # In natural language instructions, target is required for fill and click,
                 # while verify_text only requires expected_result (unless scoped to container)
-                nl_actions_requiring_target = {"fill", "click"}
+                nl_actions_requiring_target = {"fill", "click", "clear", "check", "uncheck", "select_option"}
                 if norm_act in nl_actions_requiring_target and not norm_target:
                     errors.append(
                         ValidationError(
@@ -323,12 +336,21 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
                         )
                     )
 
-                if norm_act == "verify_text" and not norm_exp:
+                if norm_act in ("verify_text", "verify_not_text") and not norm_exp:
                     errors.append(
                         ValidationError(
                             row=row_num,
                             column="expected_result",
-                            message="Action 'verify_text' requires expected text to verify.",
+                            message=f"Action '{norm_act}' requires expected text to verify.",
+                        )
+                    )
+
+                if norm_act in ("verify_url", "verify_not_url") and not norm_exp and not norm_val:
+                    errors.append(
+                        ValidationError(
+                            row=row_num,
+                            column="expected_result",
+                            message=f"Action '{norm_act}' requires expected URL substring.",
                         )
                     )
 

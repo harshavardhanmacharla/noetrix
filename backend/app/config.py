@@ -3,7 +3,7 @@ Application configuration using pydantic-settings.
 All settings are read from environment variables or .env file.
 """
 from functools import lru_cache
-from typing import List
+from typing import List, Optional
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,9 +27,21 @@ class Settings(BaseSettings):
 
     # Security & JWT
     SECRET_KEY: str = Field("change-me-in-production", repr=False)
+    SECRET_ENCRYPTION_KEY: Optional[str] = Field(None, repr=False)
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
-    ALLOW_PUBLIC_REGISTRATION: bool = False
+    ALLOW_PUBLIC_REGISTRATION: bool = True
+
+    # Password Reset & Email Configuration
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
+    FRONTEND_URL: str = "http://localhost:5173"
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = Field(None, repr=False)
+    SMTP_TLS: bool = True
+    EMAILS_FROM_EMAIL: Optional[str] = None
+    EMAILS_FROM_NAME: str = "Noetrix"
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
@@ -76,7 +88,6 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
-
 
     # Artifacts storage
     ARTIFACTS_DIR: str = "./artifacts"

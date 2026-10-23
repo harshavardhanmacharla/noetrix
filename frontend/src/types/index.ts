@@ -27,7 +27,7 @@ export interface Project {
 export interface TestStep {
   id: string;
   step_number: number;
-  action: 'navigate' | 'fill' | 'click' | 'verify_url' | 'verify_text';
+  action: 'navigate' | 'fill' | 'click' | 'verify_url' | 'verify_text' | 'discover_page' | 'clear' | 'check' | 'uncheck' | 'verify_not_text' | 'verify_not_url' | 'select_option';
   target: string;
   value?: string;
   expected_result?: string;
@@ -51,7 +51,7 @@ export interface StepDetail {
   value?: string | null;
   expected_result?: string | null;
   original_instruction?: string | null;
-  status: 'passed' | 'failed' | 'skipped' | 'running';
+  status: 'passed' | 'failed' | 'skipped' | 'running' | 'error';
   duration_ms?: number | null;
   category?: string | null;
   failure_reason?: string | null;
@@ -98,6 +98,7 @@ export interface TestResult {
   completed_at?: string;
   error_message?: string;
   screenshot_path?: string;
+  video_path?: string;
   log_output?: string;
   steps?: StepDetail[];
   step_summary?: StepSummary;
@@ -128,6 +129,32 @@ export interface ValidationResult {
   row_count: number;
   test_case_count: number;
   parsed_cases?: TestCase[];
+}
+
+export interface ParsedStepItem {
+  line_number: number;
+  raw_instruction: string;
+  is_valid: boolean;
+  action?: string | null;
+  target?: string | null;
+  value?: string | null;
+  expected_result?: string | null;
+  confidence?: number;
+  error?: string | null;
+}
+
+export interface ParseInstructionsError {
+  line: number;
+  instruction: string;
+  message: string;
+}
+
+export interface ParseInstructionsResponse {
+  is_valid: boolean;
+  total_lines: number;
+  valid_steps_count: number;
+  steps: ParsedStepItem[];
+  errors: ParseInstructionsError[];
 }
 
 export interface DashboardStats {
@@ -174,6 +201,31 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  full_name?: string | null;
+  organization_name?: string | null;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  new_password: string;
+}
+
+export interface GenericMessageResponse {
+  message: string;
+}
+
+export interface TokenVerificationResponse {
+  valid: boolean;
+  message?: string | null;
+}
+
 export interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -181,7 +233,33 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
+  register: (data: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 
+
+export interface ProjectVariable {
+  id: string;
+  project_id: string;
+  name: string;
+  value?: string | null;
+  is_secret: boolean;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectVariableCreate {
+  name: string;
+  value?: string | null;
+  is_secret?: boolean;
+  description?: string | null;
+}
+
+export interface ProjectVariableUpdate {
+  name?: string | null;
+  value?: string | null;
+  is_secret?: boolean | null;
+  description?: string | null;
+}

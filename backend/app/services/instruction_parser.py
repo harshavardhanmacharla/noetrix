@@ -11,6 +11,12 @@ Supported Canonical Actions:
     - verify_url: Assert that the current page URL matches or contains an expected string.
     - verify_text: Assert that expected text is visible on the page (or within a container).
     - discover_page: Discover interactive elements and headings on the page.
+    - clear: Clear or empty an input field.
+    - check: Explicitly check a checkbox.
+    - uncheck: Explicitly uncheck/deselect a checkbox.
+    - verify_not_text: Assert that specified text is NOT visible on the page (or within a container).
+    - verify_not_url: Assert that the current page URL does NOT contain an unexpected string.
+    - select_option: Select an option from a dropdown or combobox element.
 
 Designed to be pure, deterministic, and independent of external AI APIs or database models.
 """
@@ -29,6 +35,12 @@ CANONICAL_ACTIONS = {
     "verify_url",
     "verify_text",
     "discover_page",
+    "clear",
+    "check",
+    "uncheck",
+    "verify_not_text",
+    "verify_not_url",
+    "select_option",
 }
 
 # Synonym mapping for standalone verbs
@@ -69,6 +81,25 @@ ACTION_VERB_SYNONYMS = {
     "select": "click",
     "hit": "click",
     "choose": "click",
+    # Dropdown selection
+    "select_option": "select_option",
+    "select option": "select_option",
+    "choose option": "select_option",
+    # Field clearing
+    "clear": "clear",
+    "clear field": "clear",
+    "empty": "clear",
+    "empty field": "clear",
+    "erase": "clear",
+    # Checkbox check & uncheck
+    "check": "check",
+    "check box": "check",
+    "mark": "check",
+    "mark as checked": "check",
+    "uncheck": "uncheck",
+    "uncheck box": "uncheck",
+    "unmark": "uncheck",
+    "deselect": "uncheck",
     # Text verification
     "verify_text": "verify_text",
     "verify text": "verify_text",
@@ -76,6 +107,11 @@ ACTION_VERB_SYNONYMS = {
     "assert text": "verify_text",
     "ensure text": "verify_text",
     "confirm text": "verify_text",
+    # Negative text verification
+    "verify_not_text": "verify_not_text",
+    "verify not text": "verify_not_text",
+    "check not text": "verify_not_text",
+    "assert not text": "verify_not_text",
     # URL verification
     "verify_url": "verify_url",
     "verify url": "verify_url",
@@ -83,6 +119,11 @@ ACTION_VERB_SYNONYMS = {
     "assert url": "verify_url",
     "ensure url": "verify_url",
     "confirm url": "verify_url",
+    # Negative URL verification
+    "verify_not_url": "verify_not_url",
+    "verify not url": "verify_not_url",
+    "check not url": "verify_not_url",
+    "assert not url": "verify_not_url",
     # Discovery
     "discover_page": "discover_page",
     "discover page": "discover_page",
@@ -98,7 +139,7 @@ class ParsedInstruction(BaseModel):
 
     action: str = Field(
         ...,
-        description="Normalized canonical action: navigate, fill, click, verify_url, verify_text, discover_page",
+        description="Normalized canonical action: navigate, fill, click, verify_url, verify_text, discover_page, clear, check, uncheck, verify_not_text, verify_not_url",
     )
     target: Optional[str] = Field(
         default=None,
@@ -151,30 +192,57 @@ def _strip_quotes(text: Optional[str]) -> Optional[str]:
 def _clean_target_descriptor(target: str) -> str:
     """Clean common conversational wrappers from target strings while preserving selectors."""
     t = target.strip()
-    # Strip leading "in " or "into " preposition if left over
-    t = re.sub(r"^(?:in|into)\s+", "", t, flags=re.IGNORECASE).strip()
+    # Strip leading prepositions or phrase wrappers (e.g. "the text in", "text in", "in", "into")
+    t = re.sub(r"^(?:the\s+text\s+in|text\s+in|in|into)\s+", "", t, flags=re.IGNORECASE).strip()
     t = _strip_quotes(t) or t
 
     # If it is an explicit CSS/XPath selector or ID, preserve it
     if t.startswith(("#", ".", "[", "//", "xpath=")) or t.endswith("]"):
         return _strip_quotes(t) or t
 
-    # Strip conversational prefixes: "the", "the button", "the field", "the form", "the option", etc.
+    # Strip conversational suffixes: "button", "field", "input", "link", "form", "option", "tab", "menuitem", "checkbox", "box", "radio button", "radio"
     t = re.sub(
-        r"^(?:the\s+)?(?:button|field|input|link|element|form|option|tab|menuitem|icon|dropdown)\s+",
+        r"\s+(?:radio\s+button|radio|button|field|input|link|element|form|option|tab|menuitem|icon|dropdown|checkbox|box)$",
+        "",
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = _strip_quotes(t) or t
+    # Strip conversational prefixes: "the", "the button", "the field", "the form", "the checkbox", "the box", etc.
+    t = re.sub(
+        r"^(?:the\s+)?(?:radio\s+button|radio|button|field|input|link|element|form|option|tab|menuitem|icon|dropdown|checkbox|box)\s+",
         "",
         t,
         flags=re.IGNORECASE,
     )
     t = re.sub(r"^(?:the\s+)", "", t, flags=re.IGNORECASE)
-    # Strip conversational suffixes: "button", "field", "input", "link", "form", "option", "tab", "menuitem"
-    t = re.sub(
-        r"\s+(?:button|field|input|link|element|form|option|tab|menuitem|icon|dropdown)$",
-        "",
-        t,
-        flags=re.IGNORECASE,
-    )
     return _strip_quotes(t) or t
+
+
+def _strip_trailing_punctuation(text: str) -> str:
+    """
+    Safely strip trailing sentence punctuation (. ! ; :) from instructions
+    while preserving punctuation enclosed within quotes.
+    """
+    s = text.strip()
+    if not s:
+        return s
+    if s[-1] in ('"', "'", '”', '’'):
+        return s
+    return re.sub(r"[\.!;:]+$", "", s).strip()
+
+
+def _strip_conversational_prefix(text: str) -> str:
+    """
+    Safely strip polite or conversational prefixes at the start of instructions.
+    Examples: 'Please click #btn' -> 'click #btn'
+              'Now navigate to /login' -> 'navigate to /login'
+              'Next, enter "admin" into "#username"' -> 'enter "admin" into "#username"'
+              'And now verify that text "Welcome" is visible' -> 'verify that text "Welcome" is visible'
+    """
+    s = text.strip()
+    prefix_pattern = r"^(?:please\s+|now\s+|next,\s*|next\s+|and\s+then\s+|and\s+now\s+|then\s+)"
+    return re.sub(prefix_pattern, "", s, flags=re.IGNORECASE).strip()
 
 
 def normalize_action_verb(verb: str) -> Optional[str]:
@@ -195,20 +263,23 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
     Returns:
         InstructionParseResult containing the structured action or a specific error message.
     """
-    raw = (instruction or "").strip()
-    if not raw:
+    raw_original = (instruction or "").strip()
+    if not raw_original:
         return InstructionParseResult(
             is_valid=False,
             error="Instruction cannot be empty.",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
+
+    # Clean trailing punctuation outside quotes (e.g. 'Click the "Submit" button.' -> 'Click the "Submit" button')
+    raw_clean = _strip_trailing_punctuation(raw_original)
 
     # -------------------------------------------------------------------------
     # 0. Ambiguity Guard: Detect multiple conflicting command verbs
     # -------------------------------------------------------------------------
     compound_pattern = re.search(
-        r"\b(click|tap|press|type|enter|input|fill|navigate|visit|open|verify|assert|check|browse|launch|access|select|hit|choose|put|populate|set|insert|ensure|confirm)\b.*?\b(?:and\s+then|and)\s+\b(click|tap|press|type|enter|input|fill|navigate|visit|open|verify|assert|check|browse|launch|access|select|hit|choose|put|populate|set|insert|ensure|confirm)\b",
-        raw,
+        r"\b(click|tap|press|type|enter|input|fill|navigate|visit|open|verify|assert|check|browse|launch|access|select|hit|choose|put|populate|set|insert|ensure|confirm|clear|empty|uncheck)\b.*?\b(?:and\s+then|and)\s+\b(click|tap|press|type|enter|input|fill|navigate|visit|open|verify|assert|check|browse|launch|access|select|hit|choose|put|populate|set|insert|ensure|confirm|clear|empty|uncheck)\b",
+        raw_clean,
         flags=re.IGNORECASE,
     )
     if compound_pattern:
@@ -216,7 +287,41 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
         return InstructionParseResult(
             is_valid=False,
             error=f"Ambiguous compound instruction: detected multiple actions ('{verb1}' and '{verb2}'). Please split into separate step rows.",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
+        )
+
+    # Strip conversational prefixes after compound ambiguity check
+    raw = _strip_conversational_prefix(raw_clean)
+
+    # -------------------------------------------------------------------------
+    # Explicit Safeguards: Non-linear, dynamic, or unsupported instruction patterns
+    # -------------------------------------------------------------------------
+    # Guard A: Conditional instructions (if ... then ... / if ...)
+    if re.match(r"^if\s+.+$", raw, flags=re.IGNORECASE):
+        return InstructionParseResult(
+            is_valid=False,
+            error=f"Unsupported instruction: conditional instructions ('if ...') are not supported. Test steps must be deterministic linear actions.",
+            raw_instruction=raw_original,
+        )
+
+    # Guard B: Explicit wait or pause instructions
+    if re.match(r"^(?:wait|pause|sleep)(?:\s+.+)?$", raw, flags=re.IGNORECASE):
+        return InstructionParseResult(
+            is_valid=False,
+            error=f"Unsupported instruction: explicit wait/sleep instructions are not supported; Noetrix uses automatic bounded dynamic waits during element resolution.",
+            raw_instruction=raw_original,
+        )
+
+    # Guard C: Element state assertions (disabled/enabled/checked/unchecked)
+    if re.match(
+        r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?\s+.+\s+(?:is|are)\s+(?:disabled|enabled|checked|unchecked|selected|active|inactive)$",
+        raw,
+        flags=re.IGNORECASE,
+    ):
+        return InstructionParseResult(
+            is_valid=False,
+            error=f"Unsupported instruction: element state assertions (disabled/enabled/checked) are not supported. Use visible text or URL verification.",
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
@@ -231,9 +336,9 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             is_valid=True,
             action_data=ParsedInstruction(
                 action="discover_page",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
@@ -251,7 +356,7 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error="Missing destination URL: navigation instruction must specify a URL or path (e.g. 'open https://example.com').",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         dest_clean = _strip_quotes(dest.strip())
         return InstructionParseResult(
@@ -259,15 +364,40 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             action_data=ParsedInstruction(
                 action="navigate",
                 value=dest_clean,
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
-    # 3. URL Verification
-    # Checked before general text verification so 'verify url' is never parsed as verify_text
-    # Patterns: verify url <url>, check current url is <url>, verify that the url contains <url>, ensure url is <url>
+    # 3. Negative URL Verification
+    # Checked before positive URL and general text verification
+    # -------------------------------------------------------------------------
+    neg_url_match = re.match(
+        r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+the)?(?:\s+current)?\s+url\s+(?:does\s+not\s+contain|is\s+not|does\s+not\s+match|not\s+equals?)(?:\s+(.+))?$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if neg_url_match:
+        unexpected_url = neg_url_match.group(1)
+        if not unexpected_url or not unexpected_url.strip():
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing expected URL: negative URL verification instruction must specify the URL or path substring that should not be present.",
+                raw_instruction=raw_original,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="verify_not_url",
+                expected_result=_strip_quotes(unexpected_url.strip()),
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 4. Positive URL Verification
     # -------------------------------------------------------------------------
     url_check_match = re.match(
         r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+the)?(?:\s+current)?\s+url(?:\s+(?:is|contains|matches|equals))?(?:\s+(.+))?$",
@@ -280,22 +410,129 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error="Missing expected URL: URL verification instruction must specify the expected URL or path.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         return InstructionParseResult(
             is_valid=True,
             action_data=ParsedInstruction(
                 action="verify_url",
                 expected_result=_strip_quotes(expected_url.strip()),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
-    # 4. Text Verification
+    # 5. Negative Text Verification
     # -------------------------------------------------------------------------
-    # Bare verify/check with no parameters check first
+    # Bare negative check with no parameters
+    if re.match(
+        r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+text)?(?:\s+(?:is\s+not\s+visible|does\s+not\s+appear|is\s+not\s+displayed|is\s+not\s+shown))?$",
+        raw,
+        flags=re.IGNORECASE,
+    ) and any(neg_phrase in raw.lower() for neg_phrase in ("not visible", "not appear", "not displayed", "not shown", "does not")):
+        return InstructionParseResult(
+            is_valid=False,
+            error="Missing expected text: negative text verification instruction must specify what text to verify.",
+            raw_instruction=raw_original,
+        )
+
+    neg_text_patterns = [
+        # Pattern Neg-A: verify that [the] page does not display/contain [text] "X" [in/on Y]
+        (
+            r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+the)?\s+page\s+does\s+not\s+(?:display|contain)\s+(?:text\s+)?(.+?)(?:\s+(?:in|on)\s+(.+))?$",
+            False,
+        ),
+        # Pattern Neg-B: verify [that] text "X" is not visible / does not appear / is not displayed / is not shown [in/on Y]
+        (
+            r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?\s+text\s+(.+?)\s+(?:is\s+not\s+visible|does\s+not\s+appear|is\s+not\s+displayed|is\s+not\s+shown)(?:\s+(?:in|on)\s+(.+))?$",
+            False,
+        ),
+        # Pattern Neg-C: verify that "X" is not visible / does not appear / is not displayed [in/on Y]
+        (
+            r"^(?:verify|check|assert|ensure|confirm)\s+that\s+(.+?)\s+(?:is\s+not\s+visible|does\s+not\s+appear|is\s+not\s+displayed|is\s+not\s+shown)(?:\s+(?:in|on)\s+(.+))?$",
+            False,
+        ),
+        # Pattern Neg-D: ensure/confirm/verify/check "X" is not visible / does not appear [in/on Y]
+        (
+            r"^(?:verify|check|assert|ensure|confirm)\s+(.+?)\s+(?:is\s+not\s+visible|does\s+not\s+appear|is\s+not\s+displayed|is\s+not\s+shown)(?:\s+(?:in|on)\s+(.+))?$",
+            False,
+        ),
+        # Pattern Neg-Container: verify [that] [the] <container> does not contain / display [text] "X"
+        (
+            r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+the)?\s+(.+?)\s+does\s+not\s+(?:contain|display)\s+(?:text\s+)?(.+)$",
+            True,
+        ),
+    ]
+    for pattern, is_container_first in neg_text_patterns:
+        m = re.match(pattern, raw, flags=re.IGNORECASE)
+        if m:
+            if is_container_first:
+                container = m.group(1)
+                text_val = m.group(2)
+            else:
+                text_val = m.group(1)
+                container = m.group(2) if len(m.groups()) >= 2 else None
+
+            if not text_val or not text_val.strip() or text_val.strip().lower() in (
+                "is not visible", "does not appear", "is not displayed", "is not shown", "not visible", "not shown"
+            ):
+                return InstructionParseResult(
+                    is_valid=False,
+                    error="Missing expected text: negative text verification instruction must specify what text to verify.",
+                    raw_instruction=raw_original,
+                )
+
+            clean_text = _strip_quotes(text_val.strip())
+            clean_container = _clean_target_descriptor(container.strip()) if container else None
+
+            return InstructionParseResult(
+                is_valid=True,
+                action_data=ParsedInstruction(
+                    action="verify_not_text",
+                    expected_result=clean_text,
+                    target=clean_container,
+                    raw_instruction=raw_original,
+                ),
+                raw_instruction=raw_original,
+            )
+
+    # -------------------------------------------------------------------------
+    # 6. Container-First Positive Text Verification
+    # (e.g. verify that "#header" contains "Dashboard")
+    # -------------------------------------------------------------------------
+    container_first_match = re.match(
+        r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+the)?\s+(.+?)\s+(?:contains|displays)\s+(?:text\s+)?(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if container_first_match:
+        cont_cand = container_first_match.group(1).strip()
+        val_cand = container_first_match.group(2).strip()
+        if cont_cand.lower() not in ("page", "the page", "url", "current url", "the url"):
+            return InstructionParseResult(
+                is_valid=True,
+                action_data=ParsedInstruction(
+                    action="verify_text",
+                    expected_result=_strip_quotes(val_cand),
+                    target=_clean_target_descriptor(cont_cand),
+                    raw_instruction=raw_original,
+                ),
+                raw_instruction=raw_original,
+            )
+
+    # -------------------------------------------------------------------------
+    # 7. Standard Positive Text Verification
+    # -------------------------------------------------------------------------
+    # Checkbox bare keyword
+    if raw.lower() in ("check", "uncheck", "mark", "deselect", "mark as checked", "mark as unchecked"):
+        return InstructionParseResult(
+            is_valid=False,
+            error=f"Missing target: '{raw.lower()}' instruction must specify which checkbox to check.",
+            raw_instruction=raw_original,
+        )
+
+    # Bare verify/check with no parameters
     if re.match(
         r"^(?:verify|check|assert|ensure|confirm)(?:\s+that)?(?:\s+text)?(?:\s+(?:is\s+visible|appears|is\s+displayed|is\s+shown))?$",
         raw,
@@ -304,7 +541,7 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
         return InstructionParseResult(
             is_valid=False,
             error="Missing expected text: verification instruction must specify what text to verify.",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     text_check_patterns = [
@@ -331,11 +568,11 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 return InstructionParseResult(
                     is_valid=False,
                     error="Missing expected text: text verification instruction must specify the text to verify.",
-                    raw_instruction=raw,
+                    raw_instruction=raw_original,
                 )
 
             clean_text = _strip_quotes(text_val.strip())
-            clean_container = _strip_quotes(container.strip()) if container else None
+            clean_container = _clean_target_descriptor(container.strip()) if container else None
 
             return InstructionParseResult(
                 is_valid=True,
@@ -343,17 +580,74 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                     action="verify_text",
                     expected_result=clean_text,
                     target=clean_container,
-                    raw_instruction=raw,
+                    raw_instruction=raw_original,
                 ),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
 
     # -------------------------------------------------------------------------
-    # 5. Text Entry (Fill)
-    # Patterns:
-    #   - fill [in] / populate <target> with <value>
-    #   - set <target> to <value>
-    #   - type/enter/input/write/put/insert <value> into/in [the] <target> [field]
+    # 8. Inverted Input Phrasing
+    # (e.g. In the "Username" field, type "admin")
+    # -------------------------------------------------------------------------
+    inv_type_match = re.match(
+        r"^(?:in|on|into)\s+(?:the\s+)?(.+?)(?:\s+(?:field|input|box))?,\s*(?:type|enter|input|write|put|insert|fill|populate)\s+(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if inv_type_match:
+        target_part = inv_type_match.group(1).strip()
+        val_part = inv_type_match.group(2).strip()
+        val_part = re.sub(r"^with\s+", "", val_part, flags=re.IGNORECASE).strip()
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="fill",
+                target=_clean_target_descriptor(target_part),
+                value=_strip_quotes(val_part),
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 8b. Inverted Dropdown Selection Phrasing
+    # (e.g. In the "Role" dropdown, select "Admin" / From "#state", choose "California")
+    # -------------------------------------------------------------------------
+    inv_select_match = re.match(
+        r"^(?:in|from)\s+(?:the\s+)?(.+?)(?:\s+(?:dropdown|select))?,\s*(?:select_option|select|choose)(?:\s+option)?(?:\s+(.+))?$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if inv_select_match:
+        target_part = inv_select_match.group(1).strip()
+        val_part = inv_select_match.group(2)
+        if not val_part or not val_part.strip():
+            return InstructionParseResult(
+                is_valid=False,
+                error=f"Missing value: dropdown selection for '{target_part}' must specify which option to select.",
+                raw_instruction=raw_original,
+            )
+        clean_target = _clean_target_descriptor(target_part)
+        clean_val = _strip_quotes(val_part.strip())
+        if not clean_target:
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing target: inverted dropdown selection must specify the dropdown element.",
+                raw_instruction=raw_original,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="select_option",
+                target=clean_target,
+                value=clean_val,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 9. Standard Text Entry (Fill)
     # -------------------------------------------------------------------------
     # Form A: fill [in] / populate [in] <target> with <value>
     fill_with_match = re.match(
@@ -369,13 +663,13 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error="Missing target: 'fill' instruction must specify which field to fill.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         if not value_part:
             return InstructionParseResult(
                 is_valid=False,
                 error=f"Missing value: 'fill' instruction for '{target_part}' must specify what to fill using 'with <value>'.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
 
         return InstructionParseResult(
@@ -384,9 +678,9 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 action="fill",
                 target=_clean_target_descriptor(target_part),
                 value=_strip_quotes(value_part.strip()),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # Form B: set <target> to <value>
@@ -403,13 +697,13 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error="Missing target: 'set' instruction must specify which field to set.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         if not value_part:
             return InstructionParseResult(
                 is_valid=False,
                 error=f"Missing value: 'set' instruction for '{target_part}' must specify the value using 'to <value>'.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
 
         return InstructionParseResult(
@@ -418,9 +712,9 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 action="fill",
                 target=_clean_target_descriptor(target_part),
                 value=_strip_quotes(value_part.strip()),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # Form C: type/enter/input/write/put/insert <value> into/in <target>
@@ -437,13 +731,13 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error=f"Missing value: no text specified to enter into '{target_part}'.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         if not target_part:
             return InstructionParseResult(
                 is_valid=False,
                 error=f"Missing target: no destination field specified for value '{val_part}'.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
 
         return InstructionParseResult(
@@ -452,43 +746,184 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 action="fill",
                 target=_clean_target_descriptor(target_part),
                 value=_strip_quotes(val_part),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
-    # Malformed text entry checks:
+    # Malformed text entry checks
     if re.match(r"^(?:type|enter|input|write|put|insert)\s+(?:into|in)\s+(.+)$", raw, flags=re.IGNORECASE):
         t = re.match(r"^(?:type|enter|input|write|put|insert)\s+(?:into|in)\s+(.+)$", raw, flags=re.IGNORECASE).group(1)
         return InstructionParseResult(
             is_valid=False,
             error=f"Missing value: specify what text to enter before 'into {t}'.",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
     if re.match(r"^(?:type|enter|input|write|put|insert)\s+(.+)$", raw, flags=re.IGNORECASE):
         v = re.match(r"^(?:type|enter|input|write|put|insert)\s+(.+)$", raw, flags=re.IGNORECASE).group(1)
         return InstructionParseResult(
             is_valid=False,
             error=f"Missing target: text entry for '{v}' must specify a destination field (e.g. 'into #username').",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
     if re.match(r"^(?:type|enter|input|write|put|insert|fill|populate|set)$", raw, flags=re.IGNORECASE):
         return InstructionParseResult(
             is_valid=False,
             error="Missing target and value: text entry instruction must specify what to type and where.",
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
-    # 6. Clicking
+    # 10. Field Clearing
+    # Patterns: clear <target>, empty <target>, erase <target>
+    # -------------------------------------------------------------------------
+    clear_match = re.match(
+        r"^(?:clear|empty|erase)(?:\s+(?:the\s+)?(?:field|input|box))?(?:\s+(.+))?$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if clear_match:
+        target_part = clear_match.group(1)
+        if not target_part or not target_part.strip():
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing target: 'clear/empty' instruction must specify which field to clear.",
+                raw_instruction=raw_original,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="clear",
+                target=_clean_target_descriptor(target_part),
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 11. Checkbox Check & Uncheck
     # Patterns:
-    #   - click [on] [the] [button] <target>
-    #   - tap [on] <target>
-    #   - press [on] [the] [button] <target>
-    #   - submit [the] [form] <target>
-    #   - select [the] [button|link|option|tab] <target>
-    #   - hit [the] [button] <target>
-    #   - choose [the] [option|button|link|tab] <target>
+    #   - uncheck [the] [checkbox] <target>
+    #   - deselect [the] [checkbox] <target>
+    #   - unmark [the] [checkbox] <target>
+    #   - check [the] [checkbox] <target>
+    #   - mark [the] [checkbox] <target> [as checked]
+    # -------------------------------------------------------------------------
+    uncheck_match = re.match(
+        r"^(?:uncheck|deselect|unmark)(?:\s+(?:the\s+)?(?:checkbox|box))?(?:\s+(.+))?$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if uncheck_match:
+        target_part = uncheck_match.group(1)
+        if not target_part or not target_part.strip() or target_part.strip().lower() in ("as unchecked", "unchecked"):
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing target: 'uncheck' instruction must specify which checkbox to uncheck.",
+                raw_instruction=raw_original,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="uncheck",
+                target=_clean_target_descriptor(target_part),
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    check_cb_match = re.match(
+        r"^(?:check|mark)(?:\s+(?:the\s+)?(?:checkbox|box))?(?:\s+(.+?))?(?:\s+as\s+checked)?$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if check_cb_match:
+        target_part = check_cb_match.group(1)
+        if not target_part or not target_part.strip() or target_part.strip().lower() in ("as checked", "checked"):
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing target: 'check' instruction must specify which checkbox to check.",
+                raw_instruction=raw_original,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="check",
+                target=_clean_target_descriptor(target_part),
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 11b. Dropdown Selection
+    # Patterns:
+    #   - select/choose [option] <value> from/in [the] [dropdown] <target>
+    # -------------------------------------------------------------------------
+    # Incomplete: missing value before from/in
+    if re.match(
+        r"^(?:select_option|select|choose)(?:\s+option)?\s+(?:from|in)(?:\s+.*)?$",
+        raw,
+        flags=re.IGNORECASE,
+    ):
+        return InstructionParseResult(
+            is_valid=False,
+            error="Missing value: dropdown selection instruction must specify which option to select (e.g. 'select \"California\" from \"#state\"').",
+            raw_instruction=raw_original,
+        )
+
+    # Incomplete: missing target after from/in
+    missing_tgt_match = re.match(
+        r"^(?:select_option|select|choose)(?:\s+option)?\s+([\"'“‘].+?[\"'”’]|\S+)\s+(?:from|in)(?:\s+(?:the\s+)?dropdown)?\s*$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if missing_tgt_match:
+        val_cand = _strip_quotes(missing_tgt_match.group(1).strip())
+        return InstructionParseResult(
+            is_valid=False,
+            error=f"Missing target: dropdown selection for '{val_cand}' must specify the dropdown element (e.g. 'from \"#state\"').",
+            raw_instruction=raw_original,
+        )
+
+    dropdown_select_match = re.match(
+        r"^(?:select_option|select|choose)(?:\s+option)?\s+([\"'“‘].+?[\"'”’]|.+?)\s+(?:from|in)\s+(?:the\s+)?(?:dropdown\s+)?(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if dropdown_select_match:
+        val_cand = dropdown_select_match.group(1).strip()
+        target_cand = dropdown_select_match.group(2).strip()
+
+        clean_val = _strip_quotes(val_cand)
+        clean_target = _clean_target_descriptor(target_cand)
+
+        if not clean_val:
+            return InstructionParseResult(
+                is_valid=False,
+                error="Missing value: dropdown selection instruction must specify which option to select.",
+                raw_instruction=raw_original,
+            )
+        if not clean_target:
+            return InstructionParseResult(
+                is_valid=False,
+                error=f"Missing target: dropdown selection for '{clean_val}' must specify a specific dropdown element (e.g. 'from \"#state\"').",
+                raw_instruction=raw_original,
+            )
+
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="select_option",
+                target=clean_target,
+                value=clean_val,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 12. Clicking
     # -------------------------------------------------------------------------
     click_match = re.match(
         r"^(?:click(?:\s+on)?|tap(?:\s+on)?|press(?:\s+on)?(?:\s+the)?(?:\s+button)?|submit(?:\s+the)?(?:\s+form)?|select(?:\s+the)?(?:\s+(?:button|link|option|tab|menuitem))?|hit(?:\s+the)?(?:\s+button)?|choose(?:\s+the)?(?:\s+(?:option|button|link|tab))?)(?:\s+(.+))?$",
@@ -501,25 +936,25 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             return InstructionParseResult(
                 is_valid=False,
                 error="Missing target: click/press instruction must specify which button or element to click.",
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             )
         return InstructionParseResult(
             is_valid=True,
             action_data=ParsedInstruction(
                 action="click",
                 target=_clean_target_descriptor(target_part),
-                raw_instruction=raw,
+                raw_instruction=raw_original,
             ),
-            raw_instruction=raw,
+            raw_instruction=raw_original,
         )
 
     # -------------------------------------------------------------------------
-    # 7. Fallback: Unrecognized instruction
+    # 13. Fallback: Unrecognized instruction
     # -------------------------------------------------------------------------
     return InstructionParseResult(
         is_valid=False,
-        error=f"Unsupported instruction: could not determine action from '{raw}'. Supported actions: open/navigate, type/enter/fill, click/tap/press, verify text, verify url, discover page.",
-        raw_instruction=raw,
+        error=f"Unsupported instruction: could not determine action from '{raw_original}'. Supported actions: open/navigate, type/enter/fill, click/tap/press, clear, check, uncheck, select option, verify text, verify url, discover page.",
+        raw_instruction=raw_original,
     )
 
 
@@ -531,14 +966,6 @@ def parse_step_data(
 ) -> InstructionParseResult:
     """
     Interpret either a structured step row or a single natural language instruction row.
-
-    Maintains 100% backward compatibility:
-        - If action is already canonical ('fill', 'click', etc.), preserves structured inputs.
-        - If action is an action verb synonym ('type', 'visit', etc.), normalizes action and preserves inputs.
-        - If action contains a natural-language sentence and target/value are empty, passes it to parse_instruction.
-
-    Returns:
-        InstructionParseResult with normalized action and attributes.
     """
     raw_action = (action or "").strip()
     if not raw_action:
@@ -548,9 +975,11 @@ def parse_step_data(
             raw_instruction="",
         )
 
-    # Case 1: action is a canonical keyword (navigate, fill, click, verify_url, verify_text, discover_page)
+    # Case 1: action is a canonical keyword
     canonical = normalize_action_verb(raw_action)
-    if canonical and (target or value or expected_result or canonical == "discover_page"):
+    if canonical == "click" and raw_action.lower() in ("select", "choose") and value:
+        canonical = "select_option"
+    if canonical and (target or value or expected_result or canonical in ("discover_page", "clear", "check", "uncheck")):
         return InstructionParseResult(
             is_valid=True,
             action_data=ParsedInstruction(
@@ -564,10 +993,8 @@ def parse_step_data(
         )
 
     # Case 2: Full natural-language sentence provided in action column
-    # (e.g. action="Type 'admin' into '#user'", target=None, value=None)
     parsed = parse_instruction(raw_action)
     if parsed.is_valid and parsed.action_data:
-        # If the caller also provided explicit secondary columns, let secondary columns supplement
         action_obj = parsed.action_data
         if target and not action_obj.target:
             action_obj.target = _clean_target_descriptor(target)
@@ -591,5 +1018,4 @@ def parse_step_data(
             raw_instruction=raw_action,
         )
 
-    # Return the parse error from parse_instruction
     return parsed

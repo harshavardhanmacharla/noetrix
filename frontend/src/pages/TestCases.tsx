@@ -11,6 +11,11 @@ import {
   ChevronUp,
   Trash2,
   FolderOpen,
+  Sparkles,
+  Edit3,
+  Save,
+  HelpCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { PageLoader, LoadingSpinner } from '../components/ui/LoadingSpinner';
@@ -18,7 +23,14 @@ import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { EmptyState } from '../components/ui/EmptyState';
 import { testCasesApi } from '../api/testCases';
 import { projectsApi } from '../api/projects';
-import { TestCase, Project, ValidationResult } from '../types';
+import { TestCase, Project, ValidationResult, ParseInstructionsResponse } from '../types';
+
+const SAMPLE_INSTRUCTIONS = `open https://example.com/login
+type "admin" into "#username"
+enter "secret123" into "#password"
+click the "Sign In" button
+verify that text "Dashboard" is visible
+verify current url contains "/dashboard"`;
 
 const TestCases: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,6 +45,23 @@ const TestCases: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Creation Mode Switcher: Natural Language vs CSV Upload
+  const [creationMode, setCreationMode] = useState<'natural_language' | 'csv'>('natural_language');
+
+  // Natural Language Creator State
+  const [nlName, setNlName] = useState('');
+  const [nlDescription, setNlDescription] = useState('');
+  const [nlInstructions, setNlInstructions] = useState('');
+  const [nlParsing, setNlParsing] = useState(false);
+  const [nlParseResult, setNlParseResult] = useState<ParseInstructionsResponse | null>(null);
+  const [nlParseError, setNlParseError] = useState<string | null>(null);
+  const [nlSaving, setNlSaving] = useState(false);
+  const [nlSaveError, setNlSaveError] = useState<string | null>(null);
+  const [nlSuccessMessage, setNlSuccessMessage] = useState<string | null>(null);
+  const [nlPreviewMode, setNlPreviewMode] = useState(false);
+  const [showSyntaxGuide, setShowSyntaxGuide] = useState(false);
+
+  // CSV Upload State
   const [isDragging, setIsDragging] = useState(false);
   const [uploadResult, setUploadResult] = useState<ValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -107,17 +136,113 @@ const TestCases: React.FC = () => {
     }
   }, [selectedProjectId, fetchTestCases]);
 
-  // Handlers
+  // Project selector change handler
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
     setUploadResult(null);
     setError(null);
+    setNlParseResult(null);
+    setNlPreviewMode(false);
+    setNlSuccessMessage(null);
     if (projectId) {
       setSearchParams({ project: projectId });
     } else {
       setSearchParams({});
     }
   };
+
+  // =========================================================================
+  // Natural Language Creator Handlers
+  // =========================================================================
+
+  const handleParseInstructions = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedProjectId) {
+      setNlParseError('Please select a project before parsing instructions.');
+      return;
+    }
+    if (!nlName.trim()) {
+      setNlParseError('Please enter a test case name.');
+      return;
+    }
+    if (!nlInstructions.trim()) {
+      setNlParseError('Please enter at least one natural-language instruction.');
+      return;
+    }
+
+    setNlParsing(true);
+    setNlParseError(null);
+    setNlSaveError(null);
+    setNlSuccessMessage(null);
+
+    try {
+      const result = await testCasesApi.parseInstructions(selectedProjectId, nlInstructions);
+      setNlParseResult(result);
+      if (result.is_valid && result.steps.length > 0) {
+        setNlPreviewMode(true);
+      } else {
+        setNlPreviewMode(false);
+      }
+    } catch (err: unknown) {
+      setNlParseError(err instanceof Error ? err.message : 'Failed to parse instructions.');
+      setNlParseResult(null);
+      setNlPreviewMode(false);
+    } finally {
+      setNlParsing(false);
+    }
+  };
+
+  const handleSaveNaturalLanguageTestCase = async () => {
+    if (!selectedProjectId) {
+      setNlSaveError('Please select a project first.');
+      return;
+    }
+    if (!nlName.trim()) {
+      setNlSaveError('Test case name is required.');
+      return;
+    }
+
+    setNlSaving(true);
+    setNlSaveError(null);
+
+    try {
+      const created = await testCasesApi.createFromInstructions(
+        selectedProjectId,
+        nlName.trim(),
+        nlInstructions,
+        nlDescription.trim() || undefined
+      );
+
+      // Refresh test cases list
+      await fetchTestCases(selectedProjectId);
+
+      // Expand the newly created case
+      setExpandedCaseId(created.id);
+
+      // Reset editor state and show success
+      setNlSuccessMessage(
+        `Test case "${created.name}" created successfully with ${created.steps?.length ?? 0} step(s)!`
+      );
+      setNlName('');
+      setNlDescription('');
+      setNlInstructions('');
+      setNlParseResult(null);
+      setNlPreviewMode(false);
+    } catch (err: unknown) {
+      setNlSaveError(err instanceof Error ? err.message : 'Failed to save test case.');
+    } finally {
+      setNlSaving(false);
+    }
+  };
+
+  const handleReturnToEditor = () => {
+    setNlPreviewMode(false);
+    setNlSaveError(null);
+  };
+
+  // =========================================================================
+  // CSV Upload Handlers (Preserved)
+  // =========================================================================
 
   const handleFile = async (file: File) => {
     if (!selectedProjectId) {
@@ -222,7 +347,7 @@ const TestCases: React.FC = () => {
           />
         )}
 
-        {/* Controls row: Project Selector & Actions */}
+        {/* Top Controls Row: Project Selector */}
         <div className="card p-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <label htmlFor="project-select" className="text-sm font-medium text-slate-700">
@@ -236,6 +361,7 @@ const TestCases: React.FC = () => {
             ) : (
               <select
                 id="project-select"
+                aria-label="Active Project"
                 className="input max-w-xs font-medium text-slate-800"
                 value={selectedProjectId}
                 onChange={(e) => handleProjectChange(e.target.value)}
@@ -248,6 +374,7 @@ const TestCases: React.FC = () => {
                 ))}
               </select>
             )}
+
             {selectedProject?.app_url && (
               <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2.5 py-1 rounded-md hidden md:inline">
                 Target: {selectedProject.app_url}
@@ -259,7 +386,7 @@ const TestCases: React.FC = () => {
             <button
               onClick={downloadTemplate}
               disabled={downloadingTemplate}
-              className="btn-secondary"
+              className="btn-secondary text-xs"
               title="Download standard CSV template with required columns"
             >
               {downloadingTemplate ? (
@@ -272,8 +399,330 @@ const TestCases: React.FC = () => {
           </div>
         </div>
 
-        {/* CSV Upload area */}
-        {selectedProjectId ? (
+        {/* Creation Modes Tabs */}
+        {selectedProjectId && (
+          <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCreationMode('natural_language');
+                setError(null);
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${
+                creationMode === 'natural_language'
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Create with Natural Language</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCreationMode('csv');
+                setError(null);
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${
+                creationMode === 'csv'
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload CSV File</span>
+            </button>
+          </div>
+        )}
+
+        {/* Mode 1: Natural Language Test Case Creator */}
+        {selectedProjectId && creationMode === 'natural_language' && (
+          <div className="card p-6 border-primary-200 bg-gradient-to-b from-white to-primary-50/20">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary-600" />
+                  <span>Natural Language Test Creator</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Type instructions in plain English (one per line). Noetrix automatically interprets, validates, and converts them into structured Playwright steps.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSyntaxGuide((prev) => !prev)}
+                className="text-xs text-primary-600 hover:text-primary-800 font-medium flex items-center gap-1.5 py-1 px-2.5 rounded-lg border border-primary-200 bg-primary-50 hover:bg-primary-100/70 transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>{showSyntaxGuide ? 'Hide Supported Syntax' : 'Supported Phrasings'}</span>
+              </button>
+            </div>
+
+            {/* Syntax cheat sheet modal / card */}
+            {showSyntaxGuide && (
+              <div className="mb-5 p-4 rounded-xl border border-primary-200 bg-white shadow-sm text-xs space-y-2">
+                <p className="font-semibold text-slate-800">Supported Plain-English Instructions:</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-600">
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Navigation:</strong> <span className="font-mono">open https://example.com</span>, <span className="font-mono">visit /dashboard</span>, <span className="font-mono">go to /login</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Text Entry:</strong> <span className="font-mono">type "admin" into "#username"</span>, <span className="font-mono">fill "Email" with "user@test.com"</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Clicking:</strong> <span className="font-mono">click "#submit-btn"</span>, <span className="font-mono">click the "Sign In" button</span>, <span className="font-mono">press "Save"</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Checkboxes:</strong> <span className="font-mono">check "Remember me"</span>, <span className="font-mono">uncheck "#marketing"</span>, <span className="font-mono">mark "Terms" as checked</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Dropdowns:</strong> <span className="font-mono">select "California" from "#state"</span>, <span className="font-mono">choose "Admin" from the "Role" dropdown</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Clearing:</strong> <span className="font-mono">clear the "Search" field</span>, <span className="font-mono">erase "#notes"</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                    <strong className="text-slate-800">Assertions:</strong> <span className="font-mono">verify text "Success" is visible</span>, <span className="font-mono">verify url does not contain "/error"</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 italic">
+                  Note: Compound instructions (e.g. "click submit and enter password") and conditional logic ("if ...") are intentionally rejected to maintain step atomicity.
+                </p>
+              </div>
+            )}
+
+            {/* Success Message Banner */}
+            {nlSuccessMessage && (
+              <div className="mb-5 p-3.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-medium flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  {nlSuccessMessage}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setNlSuccessMessage(null)}
+                  className="text-emerald-700 hover:text-emerald-900 font-bold px-1"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* Parse / Save Error Alerts */}
+            {nlParseError && (
+              <div className="mb-5">
+                <ErrorAlert message={nlParseError} onDismiss={() => setNlParseError(null)} />
+              </div>
+            )}
+            {nlSaveError && (
+              <div className="mb-5">
+                <ErrorAlert message={nlSaveError} onDismiss={() => setNlSaveError(null)} />
+              </div>
+            )}
+
+            {!nlPreviewMode ? (
+              /* State A: Editing View */
+              <form onSubmit={handleParseInstructions} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-1">
+                    <label htmlFor="nl-test-name" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Test Case Name *
+                    </label>
+                    <input
+                      id="nl-test-name"
+                      type="text"
+                      className="input w-full text-sm font-medium"
+                      placeholder="e.g. User Authentication & Dashboard"
+                      value={nlName}
+                      onChange={(e) => setNlName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label htmlFor="nl-description" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Description <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                    </label>
+                    <input
+                      id="nl-description"
+                      type="text"
+                      className="input w-full text-sm"
+                      placeholder="Brief note about the purpose or flow of this test scenario"
+                      value={nlDescription}
+                      onChange={(e) => setNlDescription(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="nl-instructions" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Natural Language Instructions * (1 step per line)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!nlName) setNlName('Login and Dashboard Verification');
+                        setNlInstructions(SAMPLE_INSTRUCTIONS);
+                        setNlParseResult(null);
+                      }}
+                      className="text-xs text-primary-600 hover:text-primary-800 font-medium underline"
+                    >
+                      Insert Example Instructions
+                    </button>
+                  </div>
+
+                  <textarea
+                    id="nl-instructions"
+                    rows={7}
+                    className="input w-full font-mono text-xs leading-relaxed p-3.5 bg-slate-50 focus:bg-white"
+                    placeholder={`open https://example.com/login\ntype "admin" into "#username"\nclick the "Sign In" button\nverify that text "Welcome" is visible`}
+                    value={nlInstructions}
+                    onChange={(e) => {
+                      setNlInstructions(e.target.value);
+                      if (nlParseResult) setNlParseResult(null);
+                    }}
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Enter one action per line. Empty lines between steps are permitted and automatically skipped.
+                  </p>
+                </div>
+
+                {/* Validation errors list (if parsing was attempted and failed) */}
+                {nlParseResult && !nlParseResult.is_valid && (
+                  <div className="rounded-xl border border-red-200 bg-red-50/80 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-red-800 font-semibold text-xs">
+                      <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>
+                        Parsing Failed — {nlParseResult.errors.length} issue(s) detected:
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-red-100 text-xs text-red-700 bg-white rounded-lg border border-red-200 p-2.5">
+                      {nlParseResult.errors.map((err, i) => (
+                        <li key={i} className="py-1.5 px-2">
+                          <span className="font-mono font-bold text-red-900">Line {err.line}: </span>
+                          <span className="italic text-slate-600">"{err.instruction}"</span> —{' '}
+                          <span className="font-medium text-red-700">{err.message}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-red-600">
+                      Please correct the highlighted instructions in the editor above and click <strong>Parse Instructions</strong> again.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={nlParsing || !nlInstructions.trim()}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {nlParsing ? <LoadingSpinner size="sm" /> : <Sparkles className="w-4 h-4" />}
+                    <span>{nlParsing ? 'Parsing Instructions…' : 'Parse Instructions'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* State B: Preview Table Mode */
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-emerald-800">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>
+                      Parsing Succeeded! All {nlParseResult?.valid_steps_count ?? 0} instructions successfully mapped to canonical actions.
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Test Case: <strong className="text-slate-800">{nlName}</strong>
+                  </span>
+                </div>
+
+                {/* Structured Steps Preview Table */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-slate-500 font-semibold bg-slate-50/80 border-b border-slate-200">
+                        <th className="py-2.5 px-3 w-12 text-center">Step #</th>
+                        <th className="py-2.5 px-3">Original Instruction</th>
+                        <th className="py-2.5 px-3 w-28">Canonical Action</th>
+                        <th className="py-2.5 px-3">Target Element</th>
+                        <th className="py-2.5 px-3">Value</th>
+                        <th className="py-2.5 px-3">Expected Result</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(nlParseResult?.steps || []).map((step, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-600">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-800">
+                            {step.raw_instruction}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-primary-100 text-primary-800">
+                              {step.action}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-700">
+                            {step.target || <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-700">
+                            {step.value || <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700">
+                            {step.expected_result || <span className="text-slate-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Preview Actions: Return to Editing vs Confirm & Save */}
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={handleReturnToEditor}
+                    className="btn-secondary flex items-center gap-2 text-xs"
+                    disabled={nlSaving}
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Return to Edit Instructions</span>
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleParseInstructions()}
+                      className="btn-secondary flex items-center gap-1.5 text-xs"
+                      disabled={nlSaving || nlParsing}
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${nlParsing ? 'animate-spin' : ''}`} />
+                      <span>Re-Parse</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveNaturalLanguageTestCase}
+                      disabled={nlSaving}
+                      className="btn-primary flex items-center gap-2 shadow-sm font-semibold"
+                    >
+                      {nlSaving ? <LoadingSpinner size="sm" /> : <Save className="w-4 h-4" />}
+                      <span>{nlSaving ? 'Saving Test Case…' : 'Save Test Case'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mode 2: Existing CSV Upload Area (Preserved) */}
+        {selectedProjectId && creationMode === 'csv' && (
           <div
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
               isDragging
@@ -317,10 +766,10 @@ const TestCases: React.FC = () => {
               </>
             )}
           </div>
-        ) : null}
+        )}
 
-        {/* Upload Validation Result */}
-        {uploadResult && (
+        {/* CSV Upload Validation Result (Preserved) */}
+        {uploadResult && creationMode === 'csv' && (
           <div
             className={`card p-5 ${
               uploadResult.is_valid
@@ -390,7 +839,7 @@ const TestCases: React.FC = () => {
           </div>
         )}
 
-        {/* Test Cases Display Section */}
+        {/* Test Cases Display Section (Accordion) */}
         {selectedProjectId ? (
           <>
             {loading ? (
@@ -399,11 +848,7 @@ const TestCases: React.FC = () => {
               <EmptyState
                 icon={FileText}
                 title="No test cases found"
-                description="This project doesn't have any test cases yet. Upload a CSV file above or download the sample template to get started."
-                action={{
-                  label: 'Download CSV Template',
-                  onClick: downloadTemplate,
-                }}
+                description="This project doesn't have any test cases yet. Use the Natural Language Creator above or upload a CSV file to get started."
               />
             ) : (
               <div className="card overflow-hidden">
@@ -521,7 +966,7 @@ const TestCases: React.FC = () => {
             <EmptyState
               icon={FolderOpen}
               title="Select a project to begin"
-              description="Choose a project from the dropdown above to view, upload, and manage Playwright test scenarios."
+              description="Choose a project from the dropdown above to view, create, and manage Playwright test scenarios."
             />
           )
         )}

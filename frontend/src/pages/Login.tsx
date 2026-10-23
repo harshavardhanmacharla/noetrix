@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
@@ -145,6 +145,12 @@ export const Login: React.FC = () => {
                 >
                   Password
                 </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-primary-600 hover:text-primary-500 hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
               </div>
               <div className="relative rounded-lg shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -210,6 +216,19 @@ export const Login: React.FC = () => {
               </button>
             </div>
           </form>
+
+          {/* Sign Up Link */}
+          <div className="mt-5 text-center">
+            <p className="text-sm text-slate-600">
+              Don't have an account?{' '}
+              <Link
+                to="/register"
+                className="font-medium text-primary-600 hover:text-primary-500 hover:underline transition-colors"
+              >
+                Sign up
+              </Link>
+            </p>
+          </div>
 
           {/* Secure System Notice */}
           <div className="mt-6 pt-5 border-t border-slate-100 text-center">

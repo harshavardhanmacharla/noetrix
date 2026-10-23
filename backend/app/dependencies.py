@@ -169,6 +169,19 @@ def verify_project_access(project_id: str, user: User, db: Session) -> Project:
     return project
 
 
+def verify_project_admin_access(project_id: str, user: User, db: Session) -> Project:
+    """Verify that project exists and user has owner or admin role in its parent organization."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
+
+    verify_org_admin_access(project.org_id, user, db)
+    return project
+
+
 def verify_test_case_access(test_case_id: str, user: User, db: Session) -> TestCase:
     """Verify that test case exists and user has access to its parent project."""
     test_case = db.query(TestCase).filter(TestCase.id == test_case_id).first()

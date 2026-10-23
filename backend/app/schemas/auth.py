@@ -19,6 +19,7 @@ class UserRegisterRequest(BaseModel):
         description="Password (minimum 8 characters)",
     )
     full_name: Optional[str] = Field(None, max_length=255)
+    organization_name: Optional[str] = Field(None, max_length=255)
 
     @field_validator("email")
     @classmethod
@@ -42,6 +43,45 @@ class UserLoginRequest(BaseModel):
         if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", clean):
             raise ValueError("Invalid email address format.")
         return clean
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Payload to request password reset."""
+
+    email: str = Field(..., description="User email address")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        clean = v.strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", clean):
+            raise ValueError("Invalid email address format.")
+        return clean
+
+
+class ResetPasswordRequest(BaseModel):
+    """Payload to reset password using token."""
+
+    token: str = Field(..., min_length=16, description="Password reset token")
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="New password (minimum 8 characters)",
+    )
+
+
+class TokenVerificationResponse(BaseModel):
+    """Response when verifying a password reset token."""
+
+    valid: bool
+    message: Optional[str] = None
+
+
+class GenericMessageResponse(BaseModel):
+    """Generic status message response."""
+
+    message: str
 
 
 class UserResponse(BaseModel):

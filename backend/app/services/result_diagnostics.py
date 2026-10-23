@@ -40,7 +40,7 @@ def categorize_error_string(error_msg: str, action: Optional[str] = None) -> tup
         return "ambiguous_target", "Ambiguous Target"
     if "could not find any" in msg_lower or ("not found" in msg_lower and "text" not in msg_lower):
         return "missing_element", "Missing Element"
-    if "url verification failed" in msg_lower or "was not found as visible text" in msg_lower or "assertion" in msg_lower:
+    if "url verification failed" in msg_lower or "was not found as visible text" in msg_lower or "assertion" in msg_lower or "unexpectedly" in msg_lower or "negative" in msg_lower:
         return "assertion_failure", "Assertion Failed"
     if "timeout" in msg_lower or "timed out" in msg_lower:
         return "timeout", "Timeout"
@@ -203,6 +203,10 @@ def build_test_result_response(result: TestResult, db: Session) -> TestResultRes
     resp = TestResultResponse.model_validate(result)
     resp.steps = steps
     resp.step_summary = summary
+    for art in result.artifacts:
+        if art.artifact_type == 'video' and art.file_path:
+            resp.video_path = art.file_path
+            break
     return resp
 
 

@@ -109,6 +109,30 @@ BENCHMARK_PAGE_HTML = """<!DOCTYPE html>
         <button class="duplicate-action">Remove Target</button>
     </div>
 
+    <!-- 7. Phase 10 Checkbox & Field Clearing Controls -->
+    <div id="phase10-wrapper">
+        <label for="agree-checkbox">
+            <input type="checkbox" id="agree-checkbox" />
+            I Agree to Terms
+        </label>
+        <div id="checkbox-status">Unchecked</div>
+        <input type="text" id="clearable-field" value="Initial Value" oninput="document.getElementById('clearable-output').textContent = this.value" onchange="document.getElementById('clearable-output').textContent = this.value" />
+        <div id="clearable-output">Initial Value</div>
+        <div id="dismissable-toast">Temporary Notification</div>
+    </div>
+
+    <!-- 8. Phase 12 Dropdown Controls -->
+    <div id="phase12-wrapper">
+        <label for="state-select">Choose State</label>
+        <select id="state-select" onchange="document.getElementById('state-output').textContent = this.options[this.selectedIndex].text">
+            <option value="">-- Select State --</option>
+            <option value="CA">California</option>
+            <option value="NY">New York</option>
+            <option value="TX">Texas</option>
+        </select>
+        <div id="state-output">None</div>
+    </div>
+
     <script>
         function spawnDelayedItem() {
             setTimeout(function() {
@@ -151,6 +175,13 @@ BENCHMARK_PAGE_HTML = """<!DOCTYPE html>
         }
         function finishUpgrade() {
             document.getElementById('remount-container').textContent = 'Upgrade Completed';
+        }
+
+        var agreeCb = document.getElementById('agree-checkbox');
+        if (agreeCb) {
+            agreeCb.onchange = function() {
+                document.getElementById('checkbox-status').textContent = this.checked ? 'Agreed' : 'Unchecked';
+            };
         }
     </script>
 </body>
@@ -271,6 +302,116 @@ PARSER_GROUND_TRUTH_CASES = [
     {"id": "PAR-UNSUPP-03", "input": "drag the file to the dropzone", "expected_valid": False, "error_keyword": "Unsupported instruction"},
     {"id": "PAR-UNSUPP-04", "input": "refresh the browser window", "expected_valid": False, "error_keyword": "Unsupported instruction"},
     {"id": "PAR-UNSUPP-05", "input": "drink a cup of hot coffee", "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    # Phase 10: Negative Text Verification Paraphrases
+    {"id": "PAR-P10-NEGTEXT-01", "input": 'verify that text "Invalid login" is not visible', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Invalid login"},
+    {"id": "PAR-P10-NEGTEXT-02", "input": 'check that text "Loading..." does not appear', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Loading..."},
+    {"id": "PAR-P10-NEGTEXT-03", "input": 'assert that "Session Expired" is not displayed', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Session Expired"},
+    {"id": "PAR-P10-NEGTEXT-04", "input": 'ensure text "Payment Failed" is not shown in "#alert-box"', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Payment Failed", "expected_target": "#alert-box"},
+    {"id": "PAR-P10-NEGTEXT-05", "input": 'confirm that "Processing..." is not visible', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Processing..."},
+    {"id": "PAR-P10-NEGTEXT-06", "input": 'verify that the page does not contain "Fatal error"', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Fatal error"},
+    {"id": "PAR-P10-NEGTEXT-07", "input": 'check that the page does not display "System crash"', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "System crash"},
+    {"id": "PAR-P10-NEGTEXT-08", "input": 'verify that "#header" does not contain "Welcome Guest"', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Welcome Guest", "expected_target": "#header"},
+    # Phase 10: Negative URL Verification Paraphrases
+    {"id": "PAR-P10-NEGURL-01", "input": 'verify url does not contain "/login"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "/login"},
+    {"id": "PAR-P10-NEGURL-02", "input": 'verify that the url does not contain "https://example.com/error"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "https://example.com/error"},
+    {"id": "PAR-P10-NEGURL-03", "input": 'check current url is not "http://localhost:3000/auth"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "http://localhost:3000/auth"},
+    {"id": "PAR-P10-NEGURL-04", "input": 'assert url does not contain "/forbidden"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "/forbidden"},
+    {"id": "PAR-P10-NEGURL-05", "input": 'ensure that current url does not contain "/maintenance"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "/maintenance"},
+    # Phase 10: Checkbox Check & Uncheck Paraphrases
+    {"id": "PAR-P10-CHECK-01", "input": 'check "#terms-agree"', "expected_valid": True, "expected_action": "check", "expected_target": "#terms-agree"},
+    {"id": "PAR-P10-CHECK-02", "input": 'check the "Remember Me" checkbox', "expected_valid": True, "expected_action": "check", "expected_target": "Remember Me"},
+    {"id": "PAR-P10-CHECK-03", "input": 'mark "Subscribe to newsletter" as checked', "expected_valid": True, "expected_action": "check", "expected_target": "Subscribe to newsletter"},
+    {"id": "PAR-P10-CHECK-04", "input": 'uncheck "#newsletter-opt-in"', "expected_valid": True, "expected_action": "uncheck", "expected_target": "#newsletter-opt-in"},
+    {"id": "PAR-P10-CHECK-05", "input": 'uncheck the "Remember Password" checkbox', "expected_valid": True, "expected_action": "uncheck", "expected_target": "Remember Password"},
+    {"id": "PAR-P10-CHECK-06", "input": 'deselect the checkbox "Auto-renew"', "expected_valid": True, "expected_action": "uncheck", "expected_target": "Auto-renew"},
+    # Phase 10: Field Clearing Actions
+    {"id": "PAR-P10-CLEAR-01", "input": 'clear "#search-box"', "expected_valid": True, "expected_action": "clear", "expected_target": "#search-box"},
+    {"id": "PAR-P10-CLEAR-02", "input": 'clear the "Username" field', "expected_valid": True, "expected_action": "clear", "expected_target": "Username"},
+    {"id": "PAR-P10-CLEAR-03", "input": 'clear the input "#comment"', "expected_valid": True, "expected_action": "clear", "expected_target": "#comment"},
+    {"id": "PAR-P10-CLEAR-04", "input": 'empty the "Notes" field', "expected_valid": True, "expected_action": "clear", "expected_target": "Notes"},
+    {"id": "PAR-P10-CLEAR-05", "input": 'erase "#temp-field"', "expected_valid": True, "expected_action": "clear", "expected_target": "#temp-field"},
+    # Phase 10: Inverted Input Phrasing
+    {"id": "PAR-P10-INVFILL-01", "input": 'In the "Username" field, type "admin"', "expected_valid": True, "expected_action": "fill", "expected_target": "Username", "expected_value": "admin"},
+    {"id": "PAR-P10-INVFILL-02", "input": 'On "#search-box", enter "shoes"', "expected_valid": True, "expected_action": "fill", "expected_target": "#search-box", "expected_value": "shoes"},
+    {"id": "PAR-P10-INVFILL-03", "input": 'In "Email", enter "user@example.com"', "expected_valid": True, "expected_action": "fill", "expected_target": "Email", "expected_value": "user@example.com"},
+    {"id": "PAR-P10-INVFILL-04", "input": 'On the "Notes" field, fill with "Urgent review"', "expected_valid": True, "expected_action": "fill", "expected_target": "Notes", "expected_value": "Urgent review"},
+    # Phase 10: Conversational Prefixes & Trailing Punctuation
+    {"id": "PAR-P10-CONV-01", "input": 'Please click the "Submit" button', "expected_valid": True, "expected_action": "click", "expected_target": "Submit"},
+    {"id": "PAR-P10-CONV-02", "input": 'Now navigate to https://example.com/app', "expected_valid": True, "expected_action": "navigate", "expected_value": "https://example.com/app"},
+    {"id": "PAR-P10-CONV-03", "input": 'Next, enter "admin" into "#username"', "expected_valid": True, "expected_action": "fill", "expected_target": "#username", "expected_value": "admin"},
+    {"id": "PAR-P10-CONV-04", "input": 'Click the "Sign In" button.', "expected_valid": True, "expected_action": "click", "expected_target": "Sign In"},
+    {"id": "PAR-P10-CONV-05", "input": 'Navigate to https://example.com/login.', "expected_valid": True, "expected_action": "navigate", "expected_value": "https://example.com/login"},
+    # Phase 10: Container-First Assertions
+    {"id": "PAR-P10-CONT-01", "input": 'verify that "#header" contains "Dashboard"', "expected_valid": True, "expected_action": "verify_text", "expected_target": "#header", "expected_result": "Dashboard"},
+    {"id": "PAR-P10-CONT-02", "input": 'check the "#status-card" displays text "Online"', "expected_valid": True, "expected_action": "verify_text", "expected_target": "#status-card", "expected_result": "Online"},
+    # Phase 10: Missing Parameter & Ambiguity Rejection Guards
+    {"id": "PAR-P10-ERR-01", "input": "clear", "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P10-ERR-02", "input": "uncheck", "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P10-ERR-03", "input": "verify url does not contain", "expected_valid": False, "error_keyword": "Missing expected URL"},
+    {"id": "PAR-P10-AMB-01", "input": 'clear "#username" and then type "admin" into "#username"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    # Phase 11: Real-world Form Inputs
+    {"id": "PAR-P11-FORM-01", "input": 'type "+1 (555) 019-2834" into "Phone Number"', "expected_valid": True, "expected_action": "fill", "expected_target": "Phone Number", "expected_value": "+1 (555) 019-2834"},
+    {"id": "PAR-P11-FORM-02", "input": 'fill "Email Address" with "tester.qa+noetrix@staging.corp.com"', "expected_valid": True, "expected_action": "fill", "expected_target": "Email Address", "expected_value": "tester.qa+noetrix@staging.corp.com"},
+    {"id": "PAR-P11-FORM-03", "input": 'enter "P@$$w0rd!#2026_Secure" into "#password-input"', "expected_valid": True, "expected_action": "fill", "expected_target": "#password-input", "expected_value": "P@$$w0rd!#2026_Secure"},
+    {"id": "PAR-P11-FORM-04", "input": 'populate "Shipping Notes" with "Leave at door, gate code 4921"', "expected_valid": True, "expected_action": "fill", "expected_target": "Shipping Notes", "expected_value": "Leave at door, gate code 4921"},
+    {"id": "PAR-P11-FORM-05", "input": 'set "Transfer Amount" to "1,250.00"', "expected_valid": True, "expected_action": "fill", "expected_target": "Transfer Amount", "expected_value": "1,250.00"},
+    {"id": "PAR-P11-FORM-06", "input": 'input "94105-1234" into "#postal-code"', "expected_valid": True, "expected_action": "fill", "expected_target": "#postal-code", "expected_value": "94105-1234"},
+    {"id": "PAR-P11-FORM-07", "input": 'In "Company Name", enter "Acme Corporation"', "expected_valid": True, "expected_action": "fill", "expected_target": "Company Name", "expected_value": "Acme Corporation"},
+    {"id": "PAR-P11-FORM-08", "input": 'On the "Billing Address" input, fill with "742 Evergreen Terrace"', "expected_valid": True, "expected_action": "fill", "expected_target": "Billing Address", "expected_value": "742 Evergreen Terrace"},
+    # Phase 11: Checkboxes, Radios, and Switches
+    {"id": "PAR-P11-CHECK-01", "input": 'check "I accept the Terms and Conditions and Privacy Policy"', "expected_valid": True, "expected_action": "check", "expected_target": "I accept the Terms and Conditions and Privacy Policy"},
+    {"id": "PAR-P11-CHECK-02", "input": 'uncheck "Subscribe to weekly newsletter and marketing offers"', "expected_valid": True, "expected_action": "uncheck", "expected_target": "Subscribe to weekly newsletter and marketing offers"},
+    {"id": "PAR-P11-CHECK-03", "input": 'click the "Express 2-Day Air ($15.00)" radio button', "expected_valid": True, "expected_action": "click", "expected_target": "Express 2-Day Air ($15.00)"},
+    {"id": "PAR-P11-CHECK-04", "input": 'click "#enable-two-factor"', "expected_valid": True, "expected_action": "click", "expected_target": "#enable-two-factor"},
+    {"id": "PAR-P11-CHECK-05", "input": 'deselect the "Save payment information" checkbox', "expected_valid": True, "expected_action": "uncheck", "expected_target": "Save payment information"},
+    {"id": "PAR-P11-CHECK-06", "input": 'mark "I am 18 years or older" as checked', "expected_valid": True, "expected_action": "check", "expected_target": "I am 18 years or older"},
+    # Phase 11: Complex and Container Assertions
+    {"id": "PAR-P11-ASSERT-01", "input": 'verify that text "Order #84920 has been placed" is visible in "#confirmation-modal"', "expected_valid": True, "expected_action": "verify_text", "expected_result": "Order #84920 has been placed", "expected_target": "#confirmation-modal"},
+    {"id": "PAR-P11-ASSERT-02", "input": 'check the "#status-badge" displays "Active"', "expected_valid": True, "expected_action": "verify_text", "expected_result": "Active", "expected_target": "#status-badge"},
+    {"id": "PAR-P11-ASSERT-03", "input": 'verify that "#error-container" does not contain "Invalid Credentials"', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Invalid Credentials", "expected_target": "#error-container"},
+    {"id": "PAR-P11-ASSERT-04", "input": 'assert that "Item is out of stock" is not visible', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "Item is out of stock"},
+    {"id": "PAR-P11-ASSERT-05", "input": 'verify url does not contain "error_code=access_denied"', "expected_valid": True, "expected_action": "verify_not_url", "expected_result": "error_code=access_denied"},
+    {"id": "PAR-P11-ASSERT-06", "input": 'verify that the url contains "/checkout/success?session_id="', "expected_valid": True, "expected_action": "verify_url", "expected_result": "/checkout/success?session_id="},
+    {"id": "PAR-P11-ASSERT-07", "input": 'confirm that "Total: $1,499.99 (Tax included)" is visible', "expected_valid": True, "expected_action": "verify_text", "expected_result": "Total: $1,499.99 (Tax included)"},
+    {"id": "PAR-P11-ASSERT-08", "input": 'ensure text "502 Bad Gateway" is not visible', "expected_valid": True, "expected_action": "verify_not_text", "expected_result": "502 Bad Gateway"},
+    # Phase 11 & 12: Dropdowns and Selection Intent
+    {"id": "PAR-P11-SELECT-01", "input": 'select option "Credit Card (Visa/Mastercard)"', "expected_valid": True, "expected_action": "click", "expected_target": "Credit Card (Visa/Mastercard)"},
+    {"id": "PAR-P11-SELECT-02", "input": 'choose "Dark Mode"', "expected_valid": True, "expected_action": "click", "expected_target": "Dark Mode"},
+    {"id": "PAR-P11-SELECT-03", "input": 'select "California" from "#state"', "expected_valid": True, "expected_action": "select_option", "expected_target": "#state", "expected_value": "California"},
+    {"id": "PAR-P11-SELECT-04", "input": 'choose "Express Shipping" from dropdown "#shipping"', "expected_valid": True, "expected_action": "select_option", "expected_target": "#shipping", "expected_value": "Express Shipping"},
+    {"id": "PAR-P11-SELECT-05", "input": 'select "Admin" in "#role-dropdown"', "expected_valid": True, "expected_action": "select_option", "expected_target": "#role-dropdown", "expected_value": "Admin"},
+    {"id": "PAR-P11-SELECT-06", "input": 'choose the option "United States"', "expected_valid": True, "expected_action": "click", "expected_target": "United States"},
+    {"id": "PAR-P12-SELECT-01", "input": 'in the "Role" dropdown, select "Admin"', "expected_valid": True, "expected_action": "select_option", "expected_target": "Role", "expected_value": "Admin"},
+    {"id": "PAR-P12-SELECT-02", "input": 'from "#state", choose "California"', "expected_valid": True, "expected_action": "select_option", "expected_target": "#state", "expected_value": "California"},
+    {"id": "PAR-P12-SELECT-03", "input": 'select from "#state"', "expected_valid": False, "error_keyword": "Missing value"},
+    {"id": "PAR-P12-SELECT-04", "input": 'choose "California" from', "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P12-SELECT-05", "input": 'select "Monthly" from the billing cycle dropdown', "expected_valid": True, "expected_action": "select_option", "expected_target": "billing cycle", "expected_value": "Monthly"},
+    # Phase 11: Multi-Step Workflows (Ambiguous Compound Instructions)
+    {"id": "PAR-P11-MULTI-01", "input": 'type "admin@test.com" into "#email" and click "#submit"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    {"id": "PAR-P11-MULTI-02", "input": 'navigate to https://app.example.com and then verify text "Welcome"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    {"id": "PAR-P11-MULTI-03", "input": 'empty "#username" and type "new_user" into "#username"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    {"id": "PAR-P11-MULTI-04", "input": 'check "Terms" and press "Proceed"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    {"id": "PAR-P11-MULTI-05", "input": 'open /dashboard and verify that current url contains "/dashboard"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    {"id": "PAR-P11-MULTI-06", "input": 'tap "#avatar" and enter "John" into "#display-name"', "expected_valid": False, "is_ambiguity": True, "error_keyword": "Ambiguous compound instruction"},
+    # Phase 11: Conditional Instructions (Safely Rejected)
+    {"id": "PAR-P11-COND-01", "input": 'if "Error" appears, click "Retry"', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-COND-02", "input": 'if modal is visible, close it', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-COND-03", "input": 'if current url is "/login", enter credentials', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-COND-04", "input": 'if status is active, verify text "Online"', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    # Phase 11: Unsupported Browser Capabilities (Safely Rejected)
+    {"id": "PAR-P11-UNSUPP-01", "input": 'wait 5 seconds', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-UNSUPP-02", "input": 'pause for 3 seconds', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-UNSUPP-03", "input": 'hover over the "User Profile" avatar', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-UNSUPP-04", "input": 'upload "statement.pdf" to "#file-input"', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-UNSUPP-05", "input": 'resize window to 1280x800', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    {"id": "PAR-P11-UNSUPP-06", "input": 'verify button "Submit" is disabled', "expected_valid": False, "error_keyword": "Unsupported instruction"},
+    # Phase 11: Missing Parameter & Ambiguous Targets (Safely Rejected)
+    {"id": "PAR-P11-ERR-01", "input": 'type "hello world"', "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P11-ERR-02", "input": 'type into "#search"', "expected_valid": False, "error_keyword": "Missing value"},
+    {"id": "PAR-P11-ERR-03", "input": 'erase', "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P11-ERR-04", "input": 'mark as checked', "expected_valid": False, "error_keyword": "Missing target"},
+    {"id": "PAR-P11-ERR-05", "input": 'verify text is not visible', "expected_valid": False, "error_keyword": "Missing expected text"},
+    {"id": "PAR-P11-ERR-06", "input": 'check current url does not contain', "expected_valid": False, "error_keyword": "Missing expected URL"},
 ]
 
 
@@ -285,6 +426,14 @@ async def run_parser_benchmark() -> Dict[str, Any]:
     correct = 0
     ambiguity_total = 0
     ambiguity_correct = 0
+    genuine_failures = 0
+
+    category_metrics: Dict[str, Dict[str, int]] = {
+        "valid_actions": {"total": 0, "correct": 0},
+        "ambiguous_compound": {"total": 0, "correct": 0},
+        "unsupported_instructions": {"total": 0, "correct": 0},
+        "missing_parameters": {"total": 0, "correct": 0},
+    }
 
     start_total = time.perf_counter()
 
@@ -297,6 +446,7 @@ async def run_parser_benchmark() -> Dict[str, Any]:
         fail_reason: Optional[str] = None
 
         if case["expected_valid"]:
+            cat = "valid_actions"
             if parsed.is_valid and parsed.action_data:
                 act_ok = (parsed.action_data.action == case["expected_action"])
                 tgt_ok = (
@@ -323,6 +473,13 @@ async def run_parser_benchmark() -> Dict[str, Any]:
             else:
                 fail_reason = f"Expected valid, got invalid with error: '{parsed.error}'"
         else:
+            if case.get("is_ambiguity"):
+                cat = "ambiguous_compound"
+            elif case.get("error_keyword") == "Unsupported instruction":
+                cat = "unsupported_instructions"
+            else:
+                cat = "missing_parameters"
+
             if not parsed.is_valid:
                 kw = case.get("error_keyword")
                 if kw and kw in (parsed.error or ""):
@@ -334,8 +491,12 @@ async def run_parser_benchmark() -> Dict[str, Any]:
             else:
                 fail_reason = f"Expected invalid, got valid action '{parsed.action_data.action if parsed.action_data else None}'"
 
+        category_metrics[cat]["total"] += 1
         if is_match:
             correct += 1
+            category_metrics[cat]["correct"] += 1
+        else:
+            genuine_failures += 1
 
         if case.get("is_ambiguity"):
             ambiguity_total += 1
@@ -345,6 +506,7 @@ async def run_parser_benchmark() -> Dict[str, Any]:
         results.append({
             "id": case["id"],
             "input": case["input"],
+            "category": cat,
             "expected_valid": case["expected_valid"],
             "actual_valid": parsed.is_valid,
             "match": is_match,
@@ -361,6 +523,15 @@ async def run_parser_benchmark() -> Dict[str, Any]:
         "ambiguity_total": ambiguity_total,
         "ambiguity_correct": ambiguity_correct,
         "ambiguity_accuracy_pct": round((ambiguity_correct / ambiguity_total) * 100, 2) if ambiguity_total else 0.0,
+        "genuine_failures": genuine_failures,
+        "category_breakdown": {
+            k: {
+                "total": v["total"],
+                "correct": v["correct"],
+                "accuracy_pct": round((v["correct"] / v["total"]) * 100, 2) if v["total"] else 0.0,
+            }
+            for k, v in category_metrics.items()
+        },
         "total_duration_ms": round(duration_total_ms, 2),
         "mean_duration_ms": round(duration_total_ms / total, 2) if total else 0.0,
         "results": results,
@@ -583,6 +754,93 @@ async def run_e2e_benchmark(server_url: str, tmp_path: Path) -> Dict[str, Any]:
         tmp_path=tmp_path,
     ))
 
+    # 12. Checkbox Check & Negative Text/URL Assertion (Phase 10 Positive)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-12",
+        name="Checkbox Check & Negative Assertion Conformance",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "check", "target": "I Agree to Terms"},
+            {"step_number": 3, "action": "verify_text", "expected_result": "Agreed"},
+            {"step_number": 4, "action": "verify_not_text", "expected_result": "Unchecked"},
+            {"step_number": 5, "action": "verify_not_url", "expected_result": "/nonexistent-error-path"},
+        ],
+        expected_status="passed",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
+    # 13. Field Clearing & Re-Fill Action (Phase 10 Positive)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-13",
+        name="Field Clearing & Re-Fill Action",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "clear", "target": "#clearable-field"},
+            {"step_number": 3, "action": "fill", "target": "#clearable-field", "value": "Cleared And Replaced"},
+            {"step_number": 4, "action": "verify_text", "expected_result": "Cleared And Replaced"},
+        ],
+        expected_status="passed",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
+    # 14. Negative Text Assertion Guard Failure (Phase 10 Negative)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-14",
+        name="Negative Text Assertion False-Positive Guard Failure",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "verify_not_text", "expected_result": "Noetrix Benchmark Environment"},
+        ],
+        expected_status="failed",
+        expected_error_keyword="Negative text verification failed",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
+    # 15. Negative URL Assertion Guard Failure (Phase 10 Negative)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-15",
+        name="Negative URL Assertion False-Positive Guard Failure",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "verify_not_url", "expected_result": "benchmark.html"},
+        ],
+        expected_status="failed",
+        expected_error_keyword="Negative URL verification failed",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
+    # 16. Dropdown Selection Conformance (Phase 12 Positive)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-16",
+        name="Dropdown Selection Conformance",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "select_option", "target": "Choose State", "value": "California"},
+            {"step_number": 3, "action": "verify_text", "target": "#state-output", "expected_result": "California"},
+        ],
+        expected_status="passed",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
+    # 17. Missing Dropdown Target Error (Phase 12 Negative)
+    scenarios.append(await run_browser_scenario(
+        scenario_id="E2E-17",
+        name="Missing Dropdown Target Diagnostic Error",
+        steps=[
+            {"step_number": 1, "action": "navigate", "value": server_url},
+            {"step_number": 2, "action": "select_option", "target": "NonExistentDropdown999", "value": "OptionValue"},
+        ],
+        expected_status="failed",
+        expected_error_keyword="Could not find any dropdown matching 'NonExistentDropdown999'",
+        server_url=server_url,
+        tmp_path=tmp_path,
+    ))
+
     # Metrics calculation
     total_tasks = len(scenarios)
     correct_tasks = sum(1 for s in scenarios if s["match"])
@@ -726,6 +984,10 @@ async def main():
     parser_report = await run_parser_benchmark()
     print(f"  [OK] Parser Cases: {parser_report['correct_cases']}/{parser_report['total_cases']} ({parser_report['accuracy_pct']}%)")
     print(f"  [OK] Ambiguity Detection: {parser_report['ambiguity_correct']}/{parser_report['ambiguity_total']} ({parser_report['ambiguity_accuracy_pct']}%)")
+    print(f"  [OK] Valid Action Accuracy: {parser_report['category_breakdown']['valid_actions']['accuracy_pct']}% ({parser_report['category_breakdown']['valid_actions']['correct']}/{parser_report['category_breakdown']['valid_actions']['total']})")
+    print(f"  [OK] Unsupported Handling: {parser_report['category_breakdown']['unsupported_instructions']['accuracy_pct']}% ({parser_report['category_breakdown']['unsupported_instructions']['correct']}/{parser_report['category_breakdown']['unsupported_instructions']['total']})")
+    print(f"  [OK] Missing Parameter Handling: {parser_report['category_breakdown']['missing_parameters']['accuracy_pct']}% ({parser_report['category_breakdown']['missing_parameters']['correct']}/{parser_report['category_breakdown']['missing_parameters']['total']})")
+    print(f"  [OK] Genuine Failures: {parser_report['genuine_failures']}")
     print(f"  [OK] Parser Benchmark Duration: {parser_report['total_duration_ms']}ms (mean {parser_report['mean_duration_ms']}ms/case)")
 
     # 2. Run Real-Browser E2E Benchmark
@@ -757,6 +1019,8 @@ async def main():
             "accuracy_pct": parser_report["accuracy_pct"],
             "ambiguity_accuracy": f"{parser_report['ambiguity_correct']}/{parser_report['ambiguity_total']}",
             "ambiguity_accuracy_pct": parser_report["ambiguity_accuracy_pct"],
+            "genuine_failures": parser_report["genuine_failures"],
+            "category_breakdown": parser_report["category_breakdown"],
             "duration_ms": parser_report["total_duration_ms"],
             "mean_case_ms": parser_report["mean_duration_ms"],
         },
@@ -787,7 +1051,7 @@ async def main():
     print(f"\n[Artifact] Saved machine-readable benchmark JSON to: {results_path}")
 
     # Also save to conversation artifacts directory if it exists
-    app_data_artifact_dir = Path("C:/Users/Bhargavi/.gemini/antigravity/brain/886fae9c-5441-475f-8a10-71a86328e35c")
+    app_data_artifact_dir = Path("C:/Users/harsha.vardhan/.gemini/antigravity/brain/d5698e93-6c75-4802-b579-96b86590e6d3")
     if app_data_artifact_dir.exists():
         target_art = app_data_artifact_dir / "benchmark_results.json"
         target_art.write_text(json.dumps(full_report, indent=2, ensure_ascii=False), encoding="utf-8")
