@@ -25,6 +25,7 @@ import app.models.user  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.test_case  # noqa: F401
 import app.models.test_run  # noqa: F401
+import app.models.discovery  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Alembic Config object
@@ -34,7 +35,9 @@ config = context.config
 # Set the sqlalchemy.url from our application settings so the alembic.ini
 # placeholder is never used in production.
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+existing_url = config.get_main_option("sqlalchemy.url")
+if not existing_url or "driver://user:pass" in existing_url:
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

@@ -3,17 +3,21 @@ Application configuration using pydantic-settings.
 All settings are read from environment variables or .env file.
 """
 from functools import lru_cache
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, List, Optional
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(_ROOT_DIR / ".env", _BACKEND_DIR / ".env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -96,8 +100,43 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 10
 
     # Playwright
-    PLAYWRIGHT_HEADLESS: bool = True
+    PLAYWRIGHT_HEADLESS: bool = False
     PLAYWRIGHT_TIMEOUT_MS: int = 30000
+    PLAYWRIGHT_NAVIGATION_TIMEOUT_MS: int = 30000
+
+    # Live Discovery
+    DISCOVERY_SESSION_TIMEOUT_MINUTES: int = 15
+    ALLOW_LOCAL_DISCOVERY: bool = False
+
+    @field_validator("ALLOW_LOCAL_DISCOVERY", mode="before")
+    @classmethod
+    def parse_allow_local_discovery(cls, v: Any) -> bool:
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v)
+        if isinstance(v, str):
+            v_clean = v.strip().lower()
+            if v_clean in ("true", "1", "yes", "on", "t"):
+                return True
+            return False
+        return bool(v)
+
+    @field_validator("PLAYWRIGHT_HEADLESS", mode="before")
+    @classmethod
+    def parse_playwright_headless(cls, v: Any) -> bool:
+        """Coerce boolean environment variables and strings reliably."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v)
+        if isinstance(v, str):
+            v_clean = v.strip().lower()
+            if v_clean in ("false", "0", "no", "off", "f"):
+                return False
+            if v_clean in ("true", "1", "yes", "on", "t"):
+                return True
+        return bool(v)
 
     @property
     def cors_origins_list(self) -> List[str]:

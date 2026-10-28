@@ -9,6 +9,8 @@ import Dashboard from './pages/Dashboard';
 import Organizations from './pages/Organizations';
 import Projects from './pages/Projects';
 import TestCases from './pages/TestCases';
+import LiveDiscovery from './pages/LiveDiscovery';
+import DataDrivenExecution from './pages/DataDrivenExecution';
 import TestExecution from './pages/TestExecution';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -89,10 +91,26 @@ function App() {
               }
             />
             <Route
+              path="/discovery"
+              element={
+                <ProtectedRoute>
+                  <LiveDiscovery />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/execution"
               element={
                 <ProtectedRoute>
                   <TestExecution />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/data-driven"
+              element={
+                <ProtectedRoute>
+                  <DataDrivenExecution />
                 </ProtectedRoute>
               }
             />

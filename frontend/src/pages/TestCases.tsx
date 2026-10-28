@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   FileText,
+  Database,
   Download,
   Upload,
   CheckCircle2,
@@ -16,6 +18,7 @@ import {
   Save,
   HelpCircle,
   RefreshCw,
+  Search,
 } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { PageLoader, LoadingSpinner } from '../components/ui/LoadingSpinner';
@@ -29,8 +32,9 @@ const SAMPLE_INSTRUCTIONS = `open https://example.com/login
 type "admin" into "#username"
 enter "secret123" into "#password"
 click the "Sign In" button
-verify that text "Dashboard" is visible
-verify current url contains "/dashboard"`;
+wait until url contains "/dashboard"
+wait until page heading is "Welcome"
+verify that text "Dashboard" is visible`;
 
 const TestCases: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -69,6 +73,7 @@ const TestCases: React.FC = () => {
   const [templateError, setTemplateError] = useState<string | null>(null);
 
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Fetch available projects on mount
@@ -313,6 +318,16 @@ const TestCases: React.FC = () => {
   };
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  const filteredTestCases = testCases.filter((tc) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      tc.name.toLowerCase().includes(q) ||
+      (tc.description && tc.description.toLowerCase().includes(q)) ||
+      (tc.csv_filename && tc.csv_filename.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <Layout
@@ -586,7 +601,7 @@ const TestCases: React.FC = () => {
                     required
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Enter one action per line. Empty lines between steps are permitted and automatically skipped.
+                    Enter one action per line. Supports actions like <code className="text-slate-600 font-mono">click "Save"</code>, <code className="text-slate-600 font-mono">wait until page heading is "Person Information"</code>, <code className="text-slate-600 font-mono">wait until url contains "/home"</code>, and <code className="text-slate-600 font-mono">wait until "Submit" is enabled</code>.
                   </p>
                 </div>
 
@@ -763,6 +778,14 @@ const TestCases: React.FC = () => {
                 <p className="text-xs text-slate-500 mt-1">
                   Required columns: <span className="font-mono text-slate-600">test_case_id, test_name, step_number, action, target, value, expected_result</span>
                 </p>
+                <div className="mt-4 p-3 bg-slate-50/90 border border-slate-200/80 rounded-lg text-left text-xs text-slate-600 max-w-xl mx-auto space-y-1">
+                  <span className="font-semibold text-slate-700 block mb-0.5">Supported Actions:</span>
+                  <p className="font-mono text-[11px] text-slate-600">navigate, fill, click, select_option, clear, check, uncheck, verify_text, verify_url, verify_not_text, verify_not_url, wait_until</p>
+                  <span className="font-semibold text-slate-700 block mt-2 mb-0.5">Explicit Wait Conditions (<span className="font-mono text-primary-700 font-semibold">wait_until</span>):</span>
+                  <p className="font-mono text-[11px] text-slate-600">
+                    url_contains, page_heading, element_visible, element_enabled, element_hidden
+                  </p>
+                </div>
               </>
             )}
           </div>
@@ -852,111 +875,161 @@ const TestCases: React.FC = () => {
               />
             ) : (
               <div className="card overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-primary-600" />
-                    <h2 className="text-sm font-semibold text-slate-800">
-                      Test Cases ({testCases.length})
-                    </h2>
+                <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-primary-100 text-primary-700 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">
+                        Test Cases ({testCases.length})
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Click a test case to inspect its execution steps
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs text-slate-500">
-                    Click a test case to inspect its execution steps
-                  </span>
+                  {testCases.length > 2 && (
+                    <div className="relative max-w-xs w-full">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search test cases..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="input pl-8 py-1.5 text-xs w-full"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {testCases.map((tc) => {
-                    const stepCount = tc.steps?.length ?? 0;
-                    const isExpanded = expandedCaseId === tc.id;
-                    return (
-                      <div key={tc.id}>
-                        <div className="flex items-center gap-3 px-6 py-4 hover:bg-slate-50 transition-colors">
-                          <button
-                            type="button"
-                            className="flex-1 flex items-center gap-3 text-left focus:outline-none"
-                            onClick={() =>
-                              setExpandedCaseId((prev) => (prev === tc.id ? null : tc.id))
-                            }
-                          >
-                            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-800">{tc.name}</p>
-                              {tc.description ? (
-                                <p className="text-xs text-slate-500 truncate">{tc.description}</p>
-                              ) : tc.csv_filename ? (
-                                <p className="text-xs text-slate-400 font-mono truncate">
-                                  Source: {tc.csv_filename}
+                  {filteredTestCases.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-500">
+                      No test cases match "{searchQuery}".
+                    </div>
+                  ) : (
+                    filteredTestCases.map((tc) => {
+                      const stepCount = tc.steps?.length ?? 0;
+                      const isExpanded = expandedCaseId === tc.id;
+                      return (
+                        <div key={tc.id}>
+                          <div className="flex items-center gap-3 px-6 py-4 hover:bg-slate-50 transition-colors">
+                            <button
+                              type="button"
+                              className="flex-1 flex items-center gap-3 text-left focus:outline-none"
+                              onClick={() =>
+                                setExpandedCaseId((prev) => (prev === tc.id ? null : tc.id))
+                              }
+                            >
+                              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div className="flex-1 min-w-0 pr-2">
+                                <p className="text-sm font-medium text-slate-800 break-words" title={tc.name}>
+                                  {tc.name}
                                 </p>
-                              ) : null}
-                            </div>
-                            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600 shrink-0">
-                              {stepCount} {stepCount === 1 ? 'step' : 'steps'}
-                            </span>
-                            {isExpanded ? (
-                              <ChevronUp className="w-4 h-4 text-slate-400" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 text-slate-400" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete test case"
-                            onClick={() => handleDelete(tc.id, tc.name)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {/* Expanded Step Details */}
-                        {isExpanded && (
-                          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-                            {stepCount === 0 ? (
-                              <p className="text-xs text-slate-500 italic">
-                                No steps recorded for this test case.
-                              </p>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="text-left text-slate-500 font-semibold border-b border-slate-200">
-                                      <th className="pb-1.5 pr-3 w-12">Step #</th>
-                                      <th className="pb-1.5 pr-3 w-28">Action</th>
-                                      <th className="pb-1.5 pr-3">Target</th>
-                                      <th className="pb-1.5 pr-3">Value</th>
-                                      <th className="pb-1.5">Expected Result</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-200/60">
-                                    {(tc.steps || []).map((step) => (
-                                      <tr key={step.id} className="text-slate-700">
-                                        <td className="py-2 pr-3 font-mono font-medium text-slate-500">
-                                          {step.step_number}
-                                        </td>
-                                        <td className="py-2 pr-3">
-                                          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-primary-100 text-primary-800">
-                                            {step.action}
-                                          </span>
-                                        </td>
-                                        <td className="py-2 pr-3 font-mono text-slate-800 truncate max-w-xs">
-                                          {step.target || '—'}
-                                        </td>
-                                        <td className="py-2 pr-3 font-mono text-slate-600 truncate max-w-xs">
-                                          {step.value || '—'}
-                                        </td>
-                                        <td className="py-2 text-slate-600">
-                                          {step.expected_result || '—'}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                {tc.description ? (
+                                  <p className="text-xs text-slate-500 break-words line-clamp-2 mt-0.5">
+                                    {tc.description}
+                                  </p>
+                                ) : tc.csv_filename ? (
+                                  <p className="text-xs text-slate-400 font-mono truncate mt-0.5">
+                                    Source: {tc.csv_filename}
+                                  </p>
+                                ) : null}
                               </div>
-                            )}
+                              <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600 shrink-0">
+                                {stepCount} {stepCount === 1 ? 'step' : 'steps'}
+                              </span>
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                              )}
+                            </button>
+                            <Link
+                              to={`/data-driven?project=${selectedProjectId}&case=${tc.id}`}
+                              title="Run with data records"
+                              className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors rounded-lg flex items-center gap-1 text-xs font-medium shrink-0"
+                            >
+                              <Database className="w-4 h-4" />
+                              <span className="hidden sm:inline">Data Run</span>
+                            </Link>
+                            <button
+                              type="button"
+                              title="Delete test case"
+                              onClick={() => handleDelete(tc.id, tc.name)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+
+                          {/* Expanded Step Details */}
+                          {isExpanded && (
+                            <div className="px-6 py-4 bg-slate-50/70 border-t border-slate-100">
+                              {stepCount === 0 ? (
+                                <p className="text-xs text-slate-500 italic">
+                                  No steps recorded for this test case.
+                                </p>
+                              ) : (
+                                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-left text-slate-500 font-semibold border-b border-slate-200 bg-slate-50/60">
+                                        <th className="py-2.5 px-3 w-14 text-center">Step</th>
+                                        <th className="py-2.5 px-3 w-32">Action</th>
+                                        <th className="py-2.5 px-3">Target</th>
+                                        <th className="py-2.5 px-3">Value</th>
+                                        <th className="py-2.5 px-3">Expected Result</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {(tc.steps || []).map((step) => {
+                                        const action = step.action?.toLowerCase() || '';
+                                        let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
+                                        if (action === 'wait_until') {
+                                          badgeColor = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                                        } else if (action === 'click') {
+                                          badgeColor = 'bg-sky-50 text-sky-700 border-sky-200';
+                                        } else if (action === 'fill' || action === 'clear') {
+                                          badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                        } else if (action === 'select_option' || action === 'check' || action === 'uncheck') {
+                                          badgeColor = 'bg-purple-50 text-purple-700 border-purple-200';
+                                        } else if (action.startsWith('verify')) {
+                                          badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                                        }
+
+                                        return (
+                                          <tr key={step.id} className="text-slate-700 hover:bg-slate-50/50">
+                                            <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-500">
+                                              #{step.step_number}
+                                            </td>
+                                            <td className="py-2.5 px-3">
+                                              <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border ${badgeColor}`}>
+                                                {step.action}
+                                              </span>
+                                            </td>
+                                            <td className="py-2.5 px-3 font-mono text-slate-800 truncate max-w-xs">
+                                              {step.target || <span className="text-slate-300 font-sans">—</span>}
+                                            </td>
+                                            <td className="py-2.5 px-3 font-mono text-slate-600 truncate max-w-xs">
+                                              {step.value || <span className="text-slate-300 font-sans">—</span>}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-600">
+                                              {step.expected_result || <span className="text-slate-300 font-sans">—</span>}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}

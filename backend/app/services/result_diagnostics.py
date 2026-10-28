@@ -34,18 +34,46 @@ def categorize_error_string(error_msg: str, action: Optional[str] = None) -> tup
     """
     if not error_msg:
         return "execution_error", "Execution Error"
-    
+
     msg_lower = error_msg.lower()
-    if "ambiguous target" in msg_lower or "matches" in msg_lower and "visible elements" in msg_lower:
+    act = (action or "").strip().lower()
+
+    if "access denied" in msg_lower or "403 forbidden" in msg_lower:
+        return "access_denied", "Website Access Denied"
+
+    if "invalid locator syntax" in msg_lower or "while parsing selector" in msg_lower or "not a valid selector" in msg_lower:
+        return "invalid_locator_syntax", "Invalid Locator Syntax"
+
+    if "ambiguous target" in msg_lower or ("matches" in msg_lower and "visible elements" in msg_lower):
         return "ambiguous_target", "Ambiguous Target"
-    if "could not find any" in msg_lower or ("not found" in msg_lower and "text" not in msg_lower):
-        return "missing_element", "Missing Element"
+
+    if "element is not visible" in msg_lower or "present in dom but is not visible" in msg_lower or "present in the dom but is not visible" in msg_lower or "present in dom but hidden" in msg_lower:
+        return "element_not_visible", "Element Present But Hidden"
+
+    if "could not find any" in msg_lower or ("not found" in msg_lower and "text" not in msg_lower and "url" not in msg_lower):
+        return "missing_element", "Element Not Found"
+
     if "url verification failed" in msg_lower or "was not found as visible text" in msg_lower or "assertion" in msg_lower or "unexpectedly" in msg_lower or "negative" in msg_lower:
         return "assertion_failure", "Assertion Failed"
+
+    if act == "navigate" and ("timeout" in msg_lower or "timed out" in msg_lower):
+        return "navigation_timeout", "Navigation Timeout"
+
+    if (act == "wait_until" or "wait condition" in msg_lower) and ("timeout" in msg_lower or "timed out" in msg_lower):
+        return "wait_timeout", "Wait Condition Timed Out"
+
+    if "browser not configured" in msg_lower or "failed to launch browser" in msg_lower or "browser page crashed" in msg_lower or "browser process disconnected" in msg_lower:
+        return "browser_launch_error", "Browser Launch Error"
+
+    if "unsupported action" in msg_lower:
+        return "parsing_failure", "Unsupported Action"
+
+    if "required" in msg_lower or "requires" in msg_lower:
+        return "parsing_failure", "Invalid CSV / Missing Fields"
+
     if "timeout" in msg_lower or "timed out" in msg_lower:
         return "timeout", "Timeout"
-    if "unsupported action" in msg_lower or "requires" in msg_lower or "syntax" in msg_lower:
-        return "parsing_failure", "Syntax / Action Error"
+
     return "execution_error", "Execution Error"
 
 

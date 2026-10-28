@@ -12,6 +12,7 @@ import {
   LogOut,
   RefreshCw,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { PageLoader } from '../components/ui/LoadingSpinner';
@@ -30,6 +31,7 @@ const Organizations: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [expandedOrgId, setExpandedOrgId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Tab state for expanded org: 'projects' | 'members'
   const [activeTab, setActiveTab] = useState<Record<string, 'projects' | 'members'>>({});
@@ -377,11 +379,35 @@ const Organizations: React.FC = () => {
     }
   };
 
+  const filteredOrgs = orgs.filter((org) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      org.name.toLowerCase().includes(q) ||
+      org.slug.toLowerCase().includes(q) ||
+      (org.description && org.description.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <Layout title="Organizations" subtitle="Manage your organizations and team members">
       {/* Header action */}
-      <div className="flex justify-end mb-6">
-        <button onClick={() => setShowModal(true)} className="btn-primary">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="relative max-w-xs w-full">
+          {orgs.length > 2 && (
+            <>
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search organizations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-8 py-1.5 text-xs w-full"
+              />
+            </>
+          )}
+        </div>
+        <button onClick={() => setShowModal(true)} className="btn-primary shrink-0 self-end sm:self-auto">
           <Plus className="w-4 h-4" />
           New Organization
         </button>
@@ -400,7 +426,12 @@ const Organizations: React.FC = () => {
         />
       ) : (
         <div className="space-y-3">
-          {orgs.map((org) => {
+          {filteredOrgs.length === 0 ? (
+            <div className="card p-8 text-center text-xs text-slate-500">
+              No organizations match "{searchQuery}".
+            </div>
+          ) : (
+            filteredOrgs.map((org) => {
             const callerRole = getCallerRoleInOrg(org.id);
             const canManageMembers = callerRole === 'owner' || callerRole === 'admin' || callerRole === 'superuser';
             const isCurrentTabMembers = activeTab[org.id] === 'members';
@@ -716,9 +747,10 @@ const Organizations: React.FC = () => {
                 )}
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
+    )}
 
       {/* Create Org Modal */}
       {showModal && (

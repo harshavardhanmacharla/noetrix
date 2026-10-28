@@ -24,7 +24,7 @@ from app.models.project import Project
 from app.models.test_case import TestCase
 from app.models.test_run import TestRun
 from app.models.user import User
-from app.routers import auth, health, organizations, project_variables, projects, reports, test_cases, test_runs
+from app.routers import auth, data_driven, discovery, health, organizations, project_variables, projects, reports, test_cases, test_runs
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -69,6 +69,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
+app.include_router(discovery.router)
+app.include_router(data_driven.router)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(organizations.router)

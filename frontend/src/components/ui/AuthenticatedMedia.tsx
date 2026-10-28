@@ -138,7 +138,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedMediaProps> = ({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12 bg-black text-slate-400 text-xs gap-2">
+      <div className="flex items-center justify-center p-12 bg-slate-950 text-slate-400 text-xs gap-2 min-h-[180px] w-full rounded-lg">
         <LoadingSpinner size="sm" />
         <span>Loading browser recording...</span>
       </div>
@@ -147,7 +147,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedMediaProps> = ({
 
   if (error) {
     return (
-      <div className="p-6 bg-slate-900 border border-slate-800 rounded-lg text-center text-xs text-slate-400">
+      <div className="p-6 bg-slate-900 border border-slate-800 rounded-lg text-center text-xs text-slate-400 min-h-[140px] flex flex-col items-center justify-center">
         <Film className="w-5 h-5 mx-auto mb-2 text-slate-500" />
         <p className="font-medium text-slate-300">Recording unavailable</p>
         <p className="text-[11px] text-slate-500 mt-1">{error}</p>
@@ -160,7 +160,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedMediaProps> = ({
   }
 
   return (
-    <video controls className={className} src={blobUrl}>
+    <video controls preload="metadata" className={`${className} bg-black object-contain`} src={blobUrl}>
       Your browser does not support the video tag.
     </video>
   );

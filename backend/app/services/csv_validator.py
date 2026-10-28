@@ -35,10 +35,59 @@ SUPPORTED_ACTIONS = [
     "verify_not_text",
     "verify_not_url",
     "select_option",
+    "wait_until",
 ]
 
-# Actions that require a non-empty target (CSS selector or URL)
-ACTIONS_REQUIRING_TARGET = {"fill", "click", "verify_text", "clear", "check", "uncheck", "verify_not_text", "select_option"}
+# Supported explicit wait condition types
+SUPPORTED_WAIT_CONDITIONS = {
+    "url_contains",
+    "page_heading",
+    "element_visible",
+    "element_enabled",
+    "element_hidden",
+}
+
+WAIT_CONDITION_SYNONYMS = {
+    "url_contains": "url_contains",
+    "url contains": "url_contains",
+    "url_has": "url_contains",
+    "url": "url_contains",
+    "page_heading": "page_heading",
+    "page heading": "page_heading",
+    "heading": "page_heading",
+    "title": "page_heading",
+    "element_visible": "element_visible",
+    "element visible": "element_visible",
+    "visible": "element_visible",
+    "is_visible": "element_visible",
+    "element_enabled": "element_enabled",
+    "element enabled": "element_enabled",
+    "enabled": "element_enabled",
+    "is_enabled": "element_enabled",
+    "clickable": "element_enabled",
+    "element_hidden": "element_hidden",
+    "element hidden": "element_hidden",
+    "hidden": "element_hidden",
+    "is_hidden": "element_hidden",
+    "invisible": "element_hidden",
+    "detached": "element_hidden",
+}
+
+
+def normalize_wait_condition(raw_cond: Optional[str]) -> Optional[str]:
+    """Normalize a condition string or synonym to its canonical supported wait condition."""
+    if not raw_cond:
+        return None
+    raw_clean = str(raw_cond).strip().lower()
+    clean_snake = re.sub(r"[\s\-]+", "_", raw_clean)
+    if clean_snake in SUPPORTED_WAIT_CONDITIONS:
+        return clean_snake
+    clean_space = re.sub(r"[\s_]+", " ", raw_clean)
+    return WAIT_CONDITION_SYNONYMS.get(clean_snake) or WAIT_CONDITION_SYNONYMS.get(clean_space)
+
+
+# Actions that require a non-empty target (CSS selector or element descriptor)
+ACTIONS_REQUIRING_TARGET = {"fill", "click", "clear", "check", "uncheck", "select_option"}
 
 # Actions that require a non-empty value
 ACTIONS_REQUIRING_VALUE = {"fill", "select_option"}
@@ -115,7 +164,7 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
 
     # --- Parse CSV ---
     try:
-        df = pd.read_csv(io.BytesIO(file_content), dtype=str)
+        df = pd.read_csv(io.BytesIO(file_content), dtype=str, index_col=False)
     except Exception as exc:
         return ValidationResult(
             is_valid=False,
@@ -224,8 +273,8 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
     step_tracker: Dict[str, List[int]] = {}
     normalized_steps_by_idx: Dict[int, Dict[str, Any]] = {}
 
-    for idx, row in df.iterrows():
-        row_num = int(idx) + 2  # 1-indexed + header row
+    for idx_num, (idx, row) in enumerate(df.iterrows(), start=2):
+        row_num = idx_num
 
         test_case_id = str(row.get("test_case_id", "")).strip()
         raw_action = str(row.get("action", "")).strip()
@@ -280,6 +329,74 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
                         message=f"Action '{action_lower}' requires a non-empty value.",
                     )
                 )
+
+            if action_lower in ("verify_text", "verify_not_text") and not value and not expected_result:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        column="value",
+                        message=f"Action '{action_lower}' requires text to verify in 'value' (preferred) or 'expected_result' (legacy).",
+                    )
+                )
+
+            if action_lower in ("verify_url", "verify_not_url") and not value and not expected_result and not target:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        column="expected_result",
+                        message=f"Action '{action_lower}' requires an expected URL pattern in 'value', 'expected_result', or 'target'.",
+                    )
+                )
+
+            if action_lower == "navigate" and not value and not target and not expected_result:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        column="value",
+                        message="Action 'navigate' requires a destination URL in 'value' or 'target'.",
+                    )
+                )
+
+            if action_lower == "wait_until":
+                norm_cond = normalize_wait_condition(target)
+                val_cand = value or expected_result
+                if norm_cond:
+                    if not val_cand:
+                        errors.append(
+                            ValidationError(
+                                row=row_num,
+                                column="value",
+                                message=f"Action 'wait_until' with condition '{norm_cond}' requires a non-empty target or value.",
+                            )
+                        )
+                    target = norm_cond
+                    value = val_cand
+                    expected_result = expected_result or val_cand
+                else:
+                    rev_cond = normalize_wait_condition(value)
+                    if rev_cond:
+                        norm_cond = rev_cond
+                        elem_cand = target or expected_result
+                        if not elem_cand:
+                            errors.append(
+                                ValidationError(
+                                    row=row_num,
+                                    column="target",
+                                    message=f"Action 'wait_until' with condition '{norm_cond}' requires a non-empty target or value.",
+                                )
+                            )
+                        target = norm_cond
+                        value = elem_cand
+                        expected_result = expected_result or elem_cand
+                    else:
+                        bad_cond = target or value or "(empty)"
+                        errors.append(
+                            ValidationError(
+                                row=row_num,
+                                column="target",
+                                message=f"Unsupported wait condition '{bad_cond}'. Supported wait conditions: {sorted(list(SUPPORTED_WAIT_CONDITIONS))}.",
+                            )
+                        )
 
             normalized_steps_by_idx[int(idx)] = {
                 "step_number": step_number,
@@ -353,6 +470,24 @@ def validate_csv(file_content: bytes, filename: str = "upload.csv") -> Validatio
                             message=f"Action '{norm_act}' requires expected URL substring.",
                         )
                     )
+
+                if norm_act == "wait_until":
+                    if norm_target not in SUPPORTED_WAIT_CONDITIONS:
+                        errors.append(
+                            ValidationError(
+                                row=row_num,
+                                column="target",
+                                message=f"Unsupported wait condition '{norm_target}'. Supported wait conditions: {sorted(list(SUPPORTED_WAIT_CONDITIONS))}.",
+                            )
+                        )
+                    if not norm_val and not norm_exp:
+                        errors.append(
+                            ValidationError(
+                                row=row_num,
+                                column="value",
+                                message=f"Action 'wait_until' with condition '{norm_target}' requires a non-empty target or value.",
+                            )
+                        )
 
                 normalized_steps_by_idx[int(idx)] = {
                     "step_number": step_number,

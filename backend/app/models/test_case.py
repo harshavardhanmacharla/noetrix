@@ -77,6 +77,7 @@ class TestStep(Base):
             "verify_not_text",
             "verify_not_url",
             "select_option",
+            "wait_until",
             name="step_action",
         ),
         nullable=False,

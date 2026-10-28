@@ -27,7 +27,7 @@ export interface Project {
 export interface TestStep {
   id: string;
   step_number: number;
-  action: 'navigate' | 'fill' | 'click' | 'verify_url' | 'verify_text' | 'discover_page' | 'clear' | 'check' | 'uncheck' | 'verify_not_text' | 'verify_not_url' | 'select_option';
+  action: 'navigate' | 'fill' | 'click' | 'verify_url' | 'verify_text' | 'discover_page' | 'clear' | 'check' | 'uncheck' | 'verify_not_text' | 'verify_not_url' | 'select_option' | 'wait_until';
   target: string;
   value?: string;
   expected_result?: string;
@@ -77,6 +77,7 @@ export interface TestRun {
   status: 'pending' | 'running' | 'passed' | 'failed' | 'error';
   started_at?: string;
   completed_at?: string;
+  triggered_by?: string;
   total_tests: number;
   passed_tests: number;
   failed_tests: number;
@@ -262,4 +263,42 @@ export interface ProjectVariableUpdate {
   value?: string | null;
   is_secret?: boolean | null;
   description?: string | null;
+}
+
+export interface TestCasePlaceholdersResponse {
+  test_case_id: string;
+  test_case_name: string;
+  placeholders: string[];
+  all_placeholders?: string[];
+  project_variables?: string[];
+  step_count: number;
+  has_placeholders: boolean;
+}
+
+export interface DataDrivenValidationResponse {
+  is_valid: boolean;
+  errors: string[];
+  record_count: number;
+  placeholders: string[];
+  all_placeholders?: string[];
+  project_variables?: string[];
+}
+
+export interface DataDrivenRunRequest {
+  test_case_id: string;
+  records: Record<string, string>[];
+  triggered_by?: string;
+  stop_on_failure?: boolean;
+}
+
+export interface DataDrivenPreviewResponse {
+  test_case_id: string;
+  record: Record<string, string>;
+  steps: Array<{
+    step_number: number;
+    action: string;
+    target?: string | null;
+    value?: string | null;
+    expected_result?: string | null;
+  }>;
 }

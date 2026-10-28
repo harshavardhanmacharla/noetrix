@@ -41,10 +41,18 @@ CANONICAL_ACTIONS = {
     "verify_not_text",
     "verify_not_url",
     "select_option",
+    "wait_until",
 }
 
 # Synonym mapping for standalone verbs
 ACTION_VERB_SYNONYMS = {
+    # Synchronization / Wait
+    "wait_until": "wait_until",
+    "wait until": "wait_until",
+    "wait for": "wait_until",
+    "wait": "wait_until",
+    "await": "wait_until",
+    "synchronize": "wait_until",
     # Navigation
     "navigate": "navigate",
     "navigate to": "navigate",
@@ -304,11 +312,139 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
             raw_instruction=raw_original,
         )
 
-    # Guard B: Explicit wait or pause instructions
-    if re.match(r"^(?:wait|pause|sleep)(?:\s+.+)?$", raw, flags=re.IGNORECASE):
+    # Guard B: Explicit arbitrary wait/sleep/pause instructions (e.g., "wait 5 seconds", "pause for 3 seconds")
+    if re.match(r"^(?:pause|sleep)(?:\s+.+)?$", raw, flags=re.IGNORECASE) or re.match(
+        r"^wait(?:\s+for)?\s+\d+\s*(?:s|sec|seconds?|ms|millis|minutes?|m)?$", raw, flags=re.IGNORECASE
+    ):
         return InstructionParseResult(
             is_valid=False,
             error=f"Unsupported instruction: explicit wait/sleep instructions are not supported; Noetrix uses automatic bounded dynamic waits during element resolution.",
+            raw_instruction=raw_original,
+        )
+
+    # -------------------------------------------------------------------------
+    # 0. Explicit Wait / Synchronization Instructions (wait_until)
+    # -------------------------------------------------------------------------
+    # 0a. Explicit wait condition keyword: wait until/for <condition> <target>
+    explicit_cond_match = re.match(
+        r"^(?:wait\s+(?:until|for)|await)\s+(url_contains|page_heading|element_visible|element_enabled|element_hidden)\s+(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if explicit_cond_match:
+        cond = explicit_cond_match.group(1).lower()
+        val = _strip_quotes(explicit_cond_match.group(2).strip())
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target=cond,
+                value=val,
+                expected_result=val,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # 0b. URL condition: wait until/for url [to] contains/has/is <target>
+    wait_url_match = re.match(
+        r"^(?:wait\s+(?:until|for)|await)\s+(?:the\s+)?url(?:\s+to)?\s+(?:contains?|has|matches?|equals?|is)\s+(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if wait_url_match:
+        val = _strip_quotes(wait_url_match.group(1).strip())
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target="url_contains",
+                value=val,
+                expected_result=val,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # 0c. Page heading condition: wait until/for [the] [page] heading [is/to be] <target>
+    wait_heading_match = re.match(
+        r"^(?:wait\s+(?:until|for)|await)\s+(?:the\s+)?(?:page\s+)?heading(?:\s+(?:is|to\s+be|contains?))?\s+(.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if wait_heading_match:
+        val = _strip_quotes(wait_heading_match.group(1).strip())
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target="page_heading",
+                value=val,
+                expected_result=val,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # 0d. Element state: wait until/for [element] <target> [is/to be] (visible|enabled|hidden|clickable|invisible|detached)
+    # or wait until/for [element] <target> to (appear|disappear)
+    wait_elem_state_match = re.match(
+        r"^(?:wait\s+(?:until|for)|await)\s+(?:the\s+)?(?:element\s+)?(.+?)\s+(?:is|to\s+be)\s+(visible|enabled|hidden|clickable|invisible|detached)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if not wait_elem_state_match:
+        wait_elem_state_match = re.match(
+            r"^(?:wait\s+(?:until|for)|await)\s+(?:the\s+)?(?:element\s+)?(.+?)\s+to\s+(appear|disappear)$",
+            raw,
+            flags=re.IGNORECASE,
+        )
+    if wait_elem_state_match:
+        elem = _clean_target_descriptor(wait_elem_state_match.group(1).strip())
+        state = wait_elem_state_match.group(2).lower()
+        if state in ("visible", "appear"):
+            cond = "element_visible"
+        elif state in ("enabled", "clickable"):
+            cond = "element_enabled"
+        else:
+            cond = "element_hidden"
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target=cond,
+                value=elem,
+                expected_result=elem,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # 0e. General wait for element: wait for [element] <target>
+    wait_elem_match = re.match(
+        r"^(?:wait\s+for|await)\s+(?:the\s+)?(?:element\s+)?([\"'].+?[\"']|[a-zA-Z0-9_\-\s]+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if wait_elem_match and not re.match(r"^\d+\s*(?:s|sec|seconds?|ms|minutes?)$", wait_elem_match.group(1).strip(), flags=re.IGNORECASE):
+        elem = _clean_target_descriptor(wait_elem_match.group(1).strip())
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target="element_visible",
+                value=elem,
+                expected_result=elem,
+                raw_instruction=raw_original,
+            ),
+            raw_instruction=raw_original,
+        )
+
+    # 0f. Bare wait instructions without target/condition
+    if re.match(r"^(?:wait\s+until|wait\s+for|await|wait)$", raw, flags=re.IGNORECASE):
+        return InstructionParseResult(
+            is_valid=False,
+            error="Action 'wait_until' requires a condition type (e.g. 'url_contains', 'page_heading', 'element_visible') and a target.",
             raw_instruction=raw_original,
         )
 
@@ -490,6 +626,7 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 is_valid=True,
                 action_data=ParsedInstruction(
                     action="verify_not_text",
+                    value=clean_text,
                     expected_result=clean_text,
                     target=clean_container,
                     raw_instruction=raw_original,
@@ -514,6 +651,7 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 is_valid=True,
                 action_data=ParsedInstruction(
                     action="verify_text",
+                    value=_strip_quotes(val_cand),
                     expected_result=_strip_quotes(val_cand),
                     target=_clean_target_descriptor(cont_cand),
                     raw_instruction=raw_original,
@@ -578,6 +716,7 @@ def parse_instruction(instruction: str) -> InstructionParseResult:
                 is_valid=True,
                 action_data=ParsedInstruction(
                     action="verify_text",
+                    value=clean_text,
                     expected_result=clean_text,
                     target=clean_container,
                     raw_instruction=raw_original,
@@ -979,6 +1118,47 @@ def parse_step_data(
     canonical = normalize_action_verb(raw_action)
     if canonical == "click" and raw_action.lower() in ("select", "choose") and value:
         canonical = "select_option"
+    if canonical == "wait_until":
+        from app.services.csv_validator import normalize_wait_condition
+        norm_cond = normalize_wait_condition(target)
+        if norm_cond:
+            val_cand = _strip_quotes(value) or _strip_quotes(expected_result)
+            return InstructionParseResult(
+                is_valid=True,
+                action_data=ParsedInstruction(
+                    action="wait_until",
+                    target=norm_cond,
+                    value=val_cand,
+                    expected_result=_strip_quotes(expected_result) or val_cand,
+                    raw_instruction=raw_action,
+                ),
+                raw_instruction=raw_action,
+            )
+        rev_cond = normalize_wait_condition(value)
+        if rev_cond:
+            elem_cand = _clean_target_descriptor(target) or _strip_quotes(expected_result)
+            return InstructionParseResult(
+                is_valid=True,
+                action_data=ParsedInstruction(
+                    action="wait_until",
+                    target=rev_cond,
+                    value=elem_cand,
+                    expected_result=_strip_quotes(expected_result) or elem_cand,
+                    raw_instruction=raw_action,
+                ),
+                raw_instruction=raw_action,
+            )
+        return InstructionParseResult(
+            is_valid=True,
+            action_data=ParsedInstruction(
+                action="wait_until",
+                target=_clean_target_descriptor(target) if target else None,
+                value=_strip_quotes(value),
+                expected_result=_strip_quotes(expected_result),
+                raw_instruction=raw_action,
+            ),
+            raw_instruction=raw_action,
+        )
     if canonical and (target or value or expected_result or canonical in ("discover_page", "clear", "check", "uncheck")):
         return InstructionParseResult(
             is_valid=True,

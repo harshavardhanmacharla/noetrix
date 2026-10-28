@@ -429,10 +429,14 @@ def test_action_validation_and_required_fields_remain_enforced():
     assert res_click_target.is_valid is False
     assert any(e.column == "target" for e in res_click_target.errors)
 
-    # Verify_text missing target
-    res_verify_text = validate_csv(make_csv("TC001,Test,1,verify_text,,,expected"))
-    assert res_verify_text.is_valid is False
-    assert any(e.column == "target" for e in res_verify_text.errors)
+    # Verify_text with empty target and valid expected_result or value is valid (searches whole page)
+    res_verify_text_page = validate_csv(make_csv("TC001,Test,1,verify_text,,,expected"))
+    assert res_verify_text_page.is_valid is True
+
+    # Verify_text missing both value and expected_result
+    res_verify_text_empty = validate_csv(make_csv("TC001,Test,1,verify_text,#target,,"))
+    assert res_verify_text_empty.is_valid is False
+    assert any(e.column == "value" for e in res_verify_text_empty.errors)
 
 
 def test_select_option_csv_validation():

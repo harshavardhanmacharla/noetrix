@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Play,
+  Database,
   RotateCw,
   Clock,
   ExternalLink,
@@ -9,12 +11,16 @@ import {
   Square,
   FolderOpen,
   AlertCircle,
+  Search,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { PageLoader, LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { EmptyState } from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { RunIdBadge } from '../components/ui/RunIdBadge';
 import { projectsApi } from '../api/projects';
 import { testCasesApi } from '../api/testCases';
 import { testRunsApi } from '../api/testRuns';
@@ -39,7 +45,15 @@ export const TestExecution: React.FC = () => {
   // Active run state
   const [activeRun, setActiveRun] = useState<TestRun | null>(null);
   const [runResults, setRunResults] = useState<TestResult[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
+
+  const copyLog = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLogId(id);
+    setTimeout(() => setCopiedLogId(null), 2000);
+  };
 
   // 1. Fetch available projects
   const fetchProjects = useCallback(async () => {
@@ -206,6 +220,15 @@ export const TestExecution: React.FC = () => {
 
   const currentProject = projects.find((p) => p.id === selectedProjectId);
 
+  const filteredTestCases = testCases.filter((tc) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      tc.name.toLowerCase().includes(q) ||
+      (tc.description && tc.description.toLowerCase().includes(q))
+    );
+  });
+
   const retryOperation = () => {
     if (projects.length === 0) {
       fetchProjects();
@@ -228,6 +251,23 @@ export const TestExecution: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Data-Driven Execution Callout */}
+      <div className="mb-4 bg-primary-50 border border-primary-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5 text-primary-900">
+          <Database className="w-4 h-4 text-primary-600 shrink-0" />
+          <span>
+            <strong>Need to execute tests with multiple data records?</strong> (e.g. Hire multiple employees)
+            Use the dedicated Data-Driven Execution interface with custom values and batch progress.
+          </span>
+        </div>
+        <Link
+          to={`/data-driven${selectedProjectId ? `?project=${selectedProjectId}` : ''}`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors shrink-0 self-start sm:self-auto"
+        >
+          Open Data-Driven Testing &rarr;
+        </Link>
+      </div>
 
       {/* Top Controls Bar */}
       <div className="card p-5 mb-6">
@@ -290,10 +330,17 @@ export const TestExecution: React.FC = () => {
         {/* Left Column: Test Case Selection */}
         <div className="lg:col-span-5 space-y-4">
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 text-sm">
-                Available Test Cases ({testCases.length})
-              </h3>
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-semibold text-slate-800 text-sm">
+                  Available Test Cases ({testCases.length})
+                </h3>
+                {testCases.length > 0 && (
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {selectedCaseIds.size} of {testCases.length} selected
+                  </span>
+                )}
+              </div>
               {testCases.length > 0 && (
                 <div className="flex items-center gap-2">
                   <button
@@ -317,6 +364,19 @@ export const TestExecution: React.FC = () => {
               )}
             </div>
 
+            {testCases.length > 2 && (
+              <div className="relative mb-3">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Filter available cases..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input pl-8 py-1.5 text-xs w-full"
+                />
+              </div>
+            )}
+
             {loadingCases ? (
               <PageLoader message="Loading test cases..." />
             ) : !selectedProjectId ? (
@@ -337,48 +397,54 @@ export const TestExecution: React.FC = () => {
               />
             ) : (
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                {testCases.map((tc) => {
-                  const isChecked = selectedCaseIds.has(tc.id);
-                  const stepCount = tc.steps?.length ?? 0;
-                  return (
-                    <div
-                      key={tc.id}
-                      onClick={() => !executing && toggleCase(tc.id)}
-                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                        isChecked
-                          ? 'border-primary-200 bg-primary-50/40'
-                          : 'border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        aria-label={isChecked ? `Deselect ${tc.name}` : `Select ${tc.name}`}
-                        className="mt-0.5 text-primary-600 focus:outline-none"
+                {filteredTestCases.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    No test cases match "{searchQuery}".
+                  </div>
+                ) : (
+                  filteredTestCases.map((tc) => {
+                    const isChecked = selectedCaseIds.has(tc.id);
+                    const stepCount = tc.steps?.length ?? 0;
+                    return (
+                      <div
+                        key={tc.id}
+                        onClick={() => !executing && toggleCase(tc.id)}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                          isChecked
+                            ? 'border-primary-200 bg-primary-50/40 shadow-xs'
+                            : 'border-slate-200 hover:bg-slate-50'
+                        }`}
                       >
-                        {isChecked ? (
-                          <CheckSquare className="w-4 h-4 text-primary-600" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-400" />
-                        )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-sm text-slate-900 truncate">
-                            {tc.name}
-                          </p>
-                          <span className="text-xs text-slate-400 font-mono">
-                            {stepCount} {stepCount === 1 ? 'step' : 'steps'}
-                          </span>
+                        <button
+                          type="button"
+                          aria-label={isChecked ? `Deselect ${tc.name}` : `Select ${tc.name}`}
+                          className="mt-0.5 text-primary-600 focus:outline-none"
+                        >
+                          {isChecked ? (
+                            <CheckSquare className="w-4 h-4 text-primary-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-sm text-slate-900 break-words min-w-0" title={tc.name}>
+                              {tc.name}
+                            </p>
+                            <span className="text-xs text-slate-400 font-mono shrink-0">
+                              {stepCount} {stepCount === 1 ? 'step' : 'steps'}
+                            </span>
+                          </div>
+                          {tc.description && (
+                            <p className="text-xs text-slate-500 break-words line-clamp-2 mt-0.5" title={tc.description}>
+                              {tc.description}
+                            </p>
+                          )}
                         </div>
-                        {tc.description && (
-                          <p className="text-xs text-slate-500 truncate mt-0.5">
-                            {tc.description}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
@@ -387,13 +453,16 @@ export const TestExecution: React.FC = () => {
         {/* Right Column: Live Execution Monitor */}
         <div className="lg:col-span-7 space-y-4">
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 text-sm">Execution Monitor</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <h3 className="font-semibold text-slate-800 text-sm">Execution Monitor</h3>
+                {activeRun && <RunIdBadge runId={activeRun.id} />}
+              </div>
               {activeRun && (
                 <div className="flex items-center gap-2">
                   <StatusBadge status={activeRun.status} />
                   <button
-                    onClick={() => navigate('/reports')}
+                    onClick={() => navigate(`/reports?run=${activeRun.id}`)}
                     className="btn-secondary !py-1 !px-2.5 text-xs inline-flex items-center gap-1"
                   >
                     Reports <ExternalLink className="w-3 h-3" />
@@ -414,7 +483,7 @@ export const TestExecution: React.FC = () => {
             ) : (
               <div className="space-y-5">
                 {/* Status Header */}
-                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200/80">
+                <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                     <div>
                       <p className="text-xs text-slate-500 font-medium">Status</p>
@@ -444,9 +513,11 @@ export const TestExecution: React.FC = () => {
 
                   {/* Progress bar */}
                   <div className="mt-4 pt-3 border-t border-slate-200">
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden flex">
+                    <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden flex">
                       <div
-                        className="bg-emerald-500 transition-all duration-300"
+                        className={`bg-emerald-500 transition-all duration-300 ${
+                          activeRun.status === 'running' ? 'animate-pulse' : ''
+                        }`}
                         style={{
                           width: `${
                             activeRun.total_tests > 0
@@ -493,7 +564,7 @@ export const TestExecution: React.FC = () => {
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Step Results
                   </h4>
-                  <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                  <div className="space-y-2.5 max-h-[350px] overflow-y-auto">
                     {runResults.length === 0 ? (
                       <div className="py-6 text-center text-xs text-slate-400">
                         {executing ? (
@@ -513,7 +584,7 @@ export const TestExecution: React.FC = () => {
                         return (
                           <div
                             key={res.id}
-                            className="p-3 rounded-lg border border-slate-200 bg-white space-y-2"
+                            className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-xs"
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-medium text-sm text-slate-900">
@@ -522,14 +593,34 @@ export const TestExecution: React.FC = () => {
                               <StatusBadge status={res.status} />
                             </div>
                             {res.error_message && (
-                              <p className="text-xs text-red-600 font-mono bg-red-50/60 p-2 rounded">
+                              <p className="text-xs text-red-600 font-mono bg-red-50/70 p-2.5 rounded-lg border border-red-100">
                                 {res.error_message}
                               </p>
                             )}
                             {res.log_output && (
-                              <pre className="text-[11px] font-mono text-slate-200 bg-slate-900 p-2.5 rounded overflow-x-auto max-h-32">
-                                {res.log_output}
-                              </pre>
+                              <div className="relative group">
+                                <button
+                                  type="button"
+                                  onClick={() => copyLog(res.id, res.log_output || '')}
+                                  className="absolute top-2 right-2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-sans flex items-center gap-1 transition-colors border border-slate-700"
+                                  title="Copy log output"
+                                >
+                                  {copiedLogId === res.id ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                      <span className="text-emerald-400">Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
+                                </button>
+                                <pre className="text-[11px] font-mono text-slate-200 bg-slate-900 p-3 rounded-lg overflow-x-auto max-h-36 leading-relaxed">
+                                  {res.log_output}
+                                </pre>
+                              </div>
                             )}
                           </div>
                         );
